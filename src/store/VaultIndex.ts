@@ -14,6 +14,7 @@ import {
   locale,
   DEFAULT_PROJECT_COLOR,
   readColor,
+  projectStatusProperty,
   t
 } from '@dotpm/core'
 import { projectPathForTaskPath, resolveVaultLink } from './vaultFs'
@@ -35,6 +36,8 @@ export interface ProjectRef {
   parentPath: string | undefined
   /** The flag the note carries itself. A sub-project inherits its parent's; use `isArchived`. */
   archived: boolean
+  /** The project status property as written, `''` when unset. Resolve it with `resolveProjectStatus`. */
+  status: string
   /** Status ids the project's own palette defines. Null inherits the global palette. */
   ownStatusIds: string[] | null
   /** Which of those its own palette marks complete. Null inherits the global palette. */
@@ -61,6 +64,12 @@ export interface TaskRef {
 
 function str(raw: unknown, fallback = ''): string {
   return typeof raw === 'string' ? raw : fallback
+}
+
+/** A status typed into the property editor can come back as a number or a one-item list. */
+function statusValue(raw: unknown): string {
+  const value: unknown = Array.isArray(raw) ? raw[0] : raw
+  return typeof value === 'string' || typeof value === 'number' ? String(value).trim() : ''
 }
 
 interface ProjectTree {
@@ -485,6 +494,7 @@ export class VaultIndex {
       customFields: customFieldList(frontmatter.customFields),
       parentPath: resolveVaultLink(this.app, frontmatter.parent, path),
       archived: frontmatter.archived === true,
+      status: statusValue(frontmatter[projectStatusProperty(this.getSettings())]),
       ownStatusIds: own ? own.map((entry) => entry.id as string) : null,
       completeStatusIds: own ? own.filter((entry) => entry.complete === true).map((entry) => entry.id as string) : null,
       autoArchiveDays: ownAutoArchiveDays(frontmatter)

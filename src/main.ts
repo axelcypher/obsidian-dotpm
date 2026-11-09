@@ -1,8 +1,9 @@
-import { MarkdownView, Notice, Platform, Plugin, WorkspaceLeaf, type ViewState } from 'obsidian'
+import { MarkdownView, Notice, Platform, Plugin, TFile, WorkspaceLeaf, type ViewState } from 'obsidian'
 import {
   DEFAULT_PALETTE_COLOR,
   DEFAULT_SETTINGS,
   defaultPriorities,
+  defaultProjectStatuses,
   defaultStatuses,
   makeDefaultFilter,
   makeDefaultGroup,
@@ -17,6 +18,7 @@ import {
   dedupePeople,
   displayName,
   localApiPortFor,
+  projectStatusProperty,
   readColor,
   compareVersions,
   releaseNotesSince,
@@ -420,6 +422,8 @@ export default class PMPlugin extends Plugin {
     this.settings = Object.assign(structuredClone(DEFAULT_SETTINGS), saved ?? {})
     if (!saved?.statuses?.length) this.settings.statuses = defaultStatuses()
     if (!saved?.priorities?.length) this.settings.priorities = defaultPriorities()
+    // Unlike task statuses, a vault may clear its project statuses on purpose.
+    if (!Array.isArray(saved?.projectStatuses)) this.settings.projectStatuses = defaultProjectStatuses()
     if (!this.settings.projectFilters) this.settings.projectFilters = {}
     if (!this.settings.scopeViews) this.settings.scopeViews = {}
     if (!this.settings.collapsedTasks) this.settings.collapsedTasks = {}
@@ -554,6 +558,20 @@ export default class PMPlugin extends Plugin {
     if (!project) return
     await this.store.updateProject(project, { archived: archived || undefined })
     this.showNotice(t(archived ? 'project.archived' : 'project.unarchived', { title: project.title }))
+  }
+
+  /**
+   * Writes the status into the project note's properties, or removes it for null. The index
+   * picks the change up from the note like any other edit, and every list follows.
+   */
+  async setProjectStatus(path: string, status: string | null): Promise<void> {
+    const file = this.app.vault.getAbstractFileByPath(path)
+    if (!(file instanceof TFile)) return
+    const key = projectStatusProperty(this.settings)
+    await this.app.fileManager.processFrontMatter(file, (frontmatter: Record<string, unknown>) => {
+      if (status) frontmatter[key] = status
+      else Reflect.deleteProperty(frontmatter, key)
+    })
   }
 
   /** Prompts for a title, copies the project with fresh task ids, and opens the copy. */

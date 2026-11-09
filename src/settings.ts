@@ -3,8 +3,12 @@ import type { SettingDefinitionItem, SettingDefinitionPage } from 'obsidian'
 import type PMPlugin from './main'
 import {
   type PMSettings,
+  type ProjectStatusConfig,
   DEFAULT_PALETTE_COLOR,
+  DEFAULT_PROJECT_STATUS_PROPERTY,
   DEFAULT_SETTINGS,
+  isValidProjectStatusProperty,
+  projectStatusIdFor,
   priorityIconSetLabels,
   makeId,
   flattenTasks,
@@ -109,6 +113,7 @@ export class PMSettingTab extends PluginSettingTab {
           }
         ]
       },
+      this.projectStatusGroup(),
       {
         type: 'group',
         heading: t('settings.style.heading'),
@@ -289,6 +294,7 @@ export class PMSettingTab extends PluginSettingTab {
     }
     if (key.startsWith('localApi')) await this.plugin.syncLocalApi()
     if (key === 'dateFormat') setDateFormat(this.plugin.settings.dateFormat)
+    if (key === 'projectStatusProperty') this.rebuildIndex()
     this.plugin.refreshViews()
     this.refreshDomState()
   }
@@ -351,6 +357,95 @@ export class PMSettingTab extends PluginSettingTab {
         }
       ]
     }
+  }
+
+  private projectStatusGroup(): SettingDefinitionItem {
+    return {
+      type: 'group',
+      heading: t('settings.projectStatus.heading'),
+      items: [
+        this.projectStatusesPage(),
+        {
+          name: t('settings.projectStatusProperty.name'),
+          desc: t('settings.projectStatusProperty.desc'),
+          aliases: ['project status', 'property', 'frontmatter'],
+          control: {
+            type: 'text',
+            key: 'projectStatusProperty',
+            placeholder: DEFAULT_PROJECT_STATUS_PROPERTY,
+            validate: (value) =>
+              value.trim() === '' || isValidProjectStatusProperty(value)
+                ? undefined
+                : t('settings.projectStatusProperty.invalid')
+          }
+        },
+        {
+          name: t('settings.sortProjectsByStatus.name'),
+          desc: t('settings.sortProjectsByStatus.desc'),
+          aliases: ['project status', 'order', 'sort'],
+          control: { type: 'toggle', key: 'sortProjectsByStatus' }
+        }
+      ]
+    }
+  }
+
+  /** Like the task statuses, without a complete flag, and the list may be emptied. */
+  private projectStatusesPage(): SettingDefinitionPage {
+    const statuses = this.plugin.settings.projectStatuses
+    return {
+      type: 'page',
+      name: t('settings.projectStatuses.name'),
+      desc: t('settings.projectStatuses.desc'),
+      displayValue: () => tn('settings.statusCount', this.plugin.settings.projectStatuses.length),
+      items: [
+        {
+          type: 'list',
+          heading: t('settings.projectStatuses.name'),
+          emptyState: t('settings.projectStatuses.empty'),
+          items: statuses.map((status) => ({
+            name: status.label,
+            render: (setting: Setting) => {
+              setting.setClass('pm-palette-row')
+              renderPaletteFields(setting.controlEl, status, () => {
+                this.followLabel(status)
+                this.persist()
+              })
+            }
+          })),
+          onReorder: (from, to) => this.reorder(statuses, from, to),
+          onDelete: (index) => {
+            statuses.splice(index, 1)
+            this.persist()
+            this.update()
+          },
+          addItem: {
+            name: t('settings.projectStatuses.add'),
+            action: () => {
+              statuses.push({
+                id: 'status-' + makeId().slice(0, 6),
+                label: t('settings.projectStatuses.newLabel'),
+                color: DEFAULT_PALETTE_COLOR,
+                icon: ''
+              })
+              this.persist()
+              this.update()
+            }
+          }
+        }
+      ]
+    }
+  }
+
+  /**
+   * A preset's id is what project notes hold, so it follows the label while no project
+   * uses it yet, and stays put once one does.
+   */
+  private followLabel(status: ProjectStatusConfig): void {
+    const { projectStatuses } = this.plugin.settings
+    if (this.plugin.index.projectRefs(true).some((ref) => ref.status === status.id)) return
+    const taken = projectStatuses.filter((other) => other !== status).map((other) => other.id)
+    const id = projectStatusIdFor(status.label, taken)
+    if (id) status.id = id
   }
 
   private statusesPage(): SettingDefinitionPage {

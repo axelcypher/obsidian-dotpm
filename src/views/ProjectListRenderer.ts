@@ -9,9 +9,12 @@ import {
   type ProjectListRow,
   formatDateShort,
   dateUrgency,
+  projectStatusRank,
+  resolveProjectStatus,
   t
 } from '@dotpm/core'
 import { safeAsync, CollapseToggle, ProjectRow, projectFieldLabel } from '@dotpm/ui'
+import { addProjectStatusItems, openProjectStatusMenu, projectRowStatus } from '#ui/projectStatus'
 import { linkedRefs } from './linkedRefs'
 
 const columns = (fields: ProjectListField[]): { label: string; cls?: string }[] => [
@@ -35,6 +38,7 @@ export interface ProjectListContext {
 export function projectListItems(plugin: PMPlugin): ProjectListItem[] {
   const { index } = plugin
   const showArchived = plugin.settings.showArchivedProjects
+  const statuses = plugin.settings.projectStatuses
   const itemOf = (ref: ProjectRef): ProjectListItem => {
     const children = index.childRefs(ref.path, showArchived)
     const { total, done } = children.length ? index.rollupCounts(ref) : index.counts(ref)
@@ -44,6 +48,8 @@ export function projectListItems(plugin: PMPlugin): ProjectListItem[] {
       title: ref.title,
       folder: folderOf(projectFolderOf(plugin.app, ref.path) ?? ref.path),
       tags: ref.tags,
+      status: resolveProjectStatus(statuses, ref.status)?.id ?? '',
+      statusRank: projectStatusRank(statuses, ref.status),
       done,
       total,
       overdue,
@@ -77,23 +83,34 @@ export function renderProjectTable(
       const inner = cell.createDiv('pm-project-group')
       new CollapseToggle(inner, {
         collapsed,
-        subject: groupLabel(groupBy, key),
+        subject: groupLabel(ctx, groupBy, key),
         onToggle: () => {
           if (collapsed) collapsedGroups.delete(key)
           else collapsedGroups.add(key)
           ctx.redraw()
         }
       })
-      inner.createSpan({ cls: 'pm-project-group-label', text: groupLabel(groupBy, key) })
+      if (groupBy === 'status') renderStatusSwatch(ctx, inner, key)
+      inner.createSpan({ cls: 'pm-project-group-label', text: groupLabel(ctx, groupBy, key) })
       inner.createSpan({ cls: 'pm-project-group-count', text: String(group.count) })
     }
     if (!collapsed) for (const row of group.rows) renderRow(ctx, tbody, row)
   }
 }
 
-function groupLabel(groupBy: ProjectGroupBy, key: string): string {
+function groupLabel(ctx: ProjectListContext, groupBy: ProjectGroupBy, key: string): string {
+  if (groupBy === 'status') {
+    return resolveProjectStatus(ctx.plugin.settings.projectStatuses, key)?.label ?? t('list.noStatus')
+  }
   if (groupBy === 'tag') return key ? `#${key}` : t('list.noTag')
   return key ? `${key}/` : t('list.noFolder')
+}
+
+function renderStatusSwatch(ctx: ProjectListContext, parent: HTMLElement, key: string): void {
+  const status = resolveProjectStatus(ctx.plugin.settings.projectStatuses, key)
+  if (!status) return
+  const swatch = parent.createSpan({ cls: 'pm-project-group-swatch' })
+  swatch.style.setProperty('--pm-project-status-color', status.color)
 }
 
 function renderRow(ctx: ProjectListContext, tbody: HTMLElement, row: ProjectListRow): void {
@@ -118,6 +135,8 @@ function renderRow(ctx: ProjectListContext, tbody: HTMLElement, row: ProjectList
     members: linkedRefs(ctx.plugin.app, ref.teamMembers, ref.path),
     dueLabel: formatDateShort(item.latestDue),
     dueUrgency: dateUrgency(item.latestDue, item.overdue > 0),
+    status: projectRowStatus(ctx.plugin, item.path),
+    onStatus: (e) => openProjectStatusMenu(ctx.plugin, item.path, e),
     onToggleCollapsed: row.collapsible
       ? safeAsync(async () => {
           await ctx.plugin.toggleProjectCollapsed(item.path)
@@ -151,6 +170,11 @@ function openProjectContextMenu(ctx: ProjectListContext, ref: ProjectRef, e: Mou
         .setIcon('layers')
         .onClick(safeAsync(() => ctx.plugin.router.openScope({ kind: 'subtree', path: ref.path })))
     )
+  }
+  if (ctx.plugin.settings.projectStatuses.length || ref.status) {
+    menu.addSeparator()
+    addProjectStatusItems(menu, ctx.plugin, ref.path)
+    menu.addSeparator()
   }
   menu.addItem((item) =>
     item

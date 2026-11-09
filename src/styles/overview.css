@@ -102,6 +102,19 @@
   text-overflow: ellipsis;
 }
 
+.pm-overview-title-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+.pm-overview-title-row .pm-overview-title {
+  min-width: 0;
+}
+.pm-project-status-chip {
+  flex-shrink: 0;
+}
+
 .pm-overview-subline {
   margin-top: 2px;
   font-size: var(--font-ui-smaller);
@@ -214,6 +227,11 @@
 .pm-overview-child .pm-progress {
   width: 80px;
   flex-shrink: 0;
+}
+.pm-overview-child--status {
+  padding-left: 8px;
+  box-shadow: inset 3px 0 0 var(--pm-project-status-color);
+  background: color-mix(in srgb, var(--pm-project-status-color) 7%, transparent);
 }
 .pm-overview-child-count {
   width: 48px;

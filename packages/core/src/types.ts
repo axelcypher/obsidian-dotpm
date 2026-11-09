@@ -210,10 +210,10 @@ export interface ProjectListFilter {
   progress?: ProjectProgress[]
 }
 
-export type ProjectGroupBy = 'none' | 'folder' | 'tag'
+export type ProjectGroupBy = 'none' | 'folder' | 'tag' | 'status'
 
 /** The project list's columns after the title, in their default order. */
-export const PROJECT_LIST_FIELDS = ['progress', 'tasks', 'members', 'due'] as const
+export const PROJECT_LIST_FIELDS = ['status', 'progress', 'tasks', 'members', 'due'] as const
 export type ProjectListField = (typeof PROJECT_LIST_FIELDS)[number]
 
 /** What the project list shows. Archived projects follow `PMSettings.showArchivedProjects`. */
@@ -280,6 +280,17 @@ export interface StatusConfig {
   color: string
   icon: string
   complete: boolean
+}
+
+/**
+ * A status a whole project can be in, kept in the project note's properties. Its place in
+ * `PMSettings.projectStatuses` is its place in the project list.
+ */
+export interface ProjectStatusConfig {
+  id: string
+  label: string
+  color: string
+  icon: string
 }
 
 /** Overrides a project may set in its own file. An absent field falls back to the global settings. */
@@ -355,6 +366,12 @@ export interface PMSettings {
   holidays: string[]
   statuses: StatusConfig[]
   priorities: PriorityConfig[]
+  /** The statuses a project can be put in, in the order the project list shows them. May be empty. */
+  projectStatuses: ProjectStatusConfig[]
+  /** The project note property holding its status. Empty falls back to `DEFAULT_PROJECT_STATUS_PROPERTY`. */
+  projectStatusProperty: string
+  /** Whether the project list puts projects in status order before applying its own sort. */
+  sortProjectsByStatus: boolean
   /** Icons for priorities that don't carry their own. */
   priorityIcons: PriorityIconSet
   /** Task properties every project starts with. A project adds to these, or overrides one by id. */
@@ -412,6 +429,15 @@ export const DEFAULT_STATUSES: StatusConfig[] = [
   { id: 'cancelled', label: 'Cancelled', color: '#767491', icon: '', complete: true }
 ]
 
+export const DEFAULT_PROJECT_STATUSES: ProjectStatusConfig[] = [
+  { id: 'active', label: 'Active', color: '#79b58d', icon: '' },
+  { id: 'planned', label: 'Planned', color: '#6f95c4', icon: '' },
+  { id: 'on-hold', label: 'On hold', color: '#b8a06b', icon: '' },
+  { id: 'done', label: 'Done', color: '#8a94a0', icon: '' }
+]
+
+export const DEFAULT_PROJECT_STATUS_PROPERTY = 'status'
+
 export const DEFAULT_PRIORITIES: PriorityConfig[] = [
   { id: 'critical', label: 'Critical', color: '#c47070', icon: '' },
   { id: 'high', label: 'High', color: '#b8a06b', icon: '' },
@@ -430,6 +456,16 @@ export function defaultStatuses(): StatusConfig[] {
     cancelled: t('status.cancelled')
   }
   return DEFAULT_STATUSES.map((status) => ({ ...status, label: labels[status.id] ?? status.label }))
+}
+
+export function defaultProjectStatuses(): ProjectStatusConfig[] {
+  const labels: Record<string, string> = {
+    active: t('projectStatus.active'),
+    planned: t('projectStatus.planned'),
+    'on-hold': t('projectStatus.onHold'),
+    done: t('projectStatus.done')
+  }
+  return DEFAULT_PROJECT_STATUSES.map((status) => ({ ...status, label: labels[status.id] ?? status.label }))
 }
 
 export function defaultPriorities(): PriorityConfig[] {
@@ -460,6 +496,9 @@ export const DEFAULT_SETTINGS: PMSettings = {
   holidays: [],
   statuses: DEFAULT_STATUSES,
   priorities: DEFAULT_PRIORITIES,
+  projectStatuses: DEFAULT_PROJECT_STATUSES,
+  projectStatusProperty: DEFAULT_PROJECT_STATUS_PROPERTY,
+  sortProjectsByStatus: true,
   priorityIcons: 'chevrons',
   customFields: [],
   globalTeamMembers: [],

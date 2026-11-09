@@ -42,6 +42,7 @@ function projectRef(id: string, path: string): ProjectRef {
     customFields: [],
     parentPath: undefined,
     archived: false,
+    status: '',
     ownStatusIds: null,
     completeStatusIds: null,
     autoArchiveDays: null

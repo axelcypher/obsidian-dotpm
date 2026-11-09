@@ -15,6 +15,7 @@ import {
   dateUrgency,
   dedupePeople,
   isTerminalStatus,
+  projectStatusRank,
   t,
   tn
 } from '@dotpm/core'
@@ -33,8 +34,10 @@ import {
   type MilestonePoint,
   renderTagChip,
   renderTimeChip,
-  renderGlyph
+  renderGlyph,
+  renderProjectStatusChip
 } from '@dotpm/ui'
+import { openProjectStatusMenu, projectRowStatus } from '#ui/projectStatus'
 import { linkedRefs } from './linkedRefs'
 
 export const PM_PROJECT_OVERVIEW_VIEW_TYPE = 'pm-project-overview'
@@ -167,18 +170,34 @@ export class ProjectOverviewView extends ItemView {
     this.renderProperties(side, project, tasks, rollup)
   }
 
+  /** Statuses are part of it: they live in the notes' properties, which only the index sees change. */
   private signTree(project: Project): string {
-    const parent = this.plugin.index.parentOf(project.filePath)?.path ?? ''
-    const archived = this.plugin.index.isArchived(project.filePath) ? 'archived' : ''
-    return `${parent}|${archived}|${this.children(project)
-      .map((child) => child.path)
+    const { index } = this.plugin
+    const parent = index.parentOf(project.filePath)?.path ?? ''
+    const archived = index.isArchived(project.filePath) ? 'archived' : ''
+    const status = index.projectRef(project.filePath)?.status ?? ''
+    return `${parent}|${archived}|${status}|${this.children(project)
+      .map((child) => `${child.path}=${child.status}`)
       .join(',')}`
   }
 
   /** An archived project shows its sub-projects, which are archived with it; a live one shows the live ones. */
   private children(project: Project): ProjectRef[] {
-    const archived = this.plugin.index.isArchived(project.filePath)
-    return this.plugin.index.childRefs(project.filePath, archived || this.plugin.settings.showArchivedProjects)
+    const { settings, index } = this.plugin
+    const archived = index.isArchived(project.filePath)
+    const children = index.childRefs(project.filePath, archived || settings.showArchivedProjects)
+    if (!settings.sortProjectsByStatus) return children
+    const rank = (ref: ProjectRef): number => projectStatusRank(settings.projectStatuses, ref.status)
+    return children.sort((a, b) => rank(a) - rank(b))
+  }
+
+  /** The project's status, or an empty chip to set one; both open the quick switch. */
+  private renderStatusChip(parent: HTMLElement, path: string): void {
+    const status = projectRowStatus(this.plugin, path)
+    if (!status && !this.plugin.settings.projectStatuses.length) return
+    renderProjectStatusChip(parent, status, (e) => openProjectStatusMenu(this.plugin, path, e)).el.addClass(
+      'pm-project-status-chip'
+    )
   }
 
   private renderArchivedBanner(project: Project): void {
@@ -205,7 +224,9 @@ export class ProjectOverviewView extends ItemView {
     renderGlyph(tile, { icon: project.icon, color: project.color })
 
     const identity = header.createDiv('pm-overview-identity')
-    identity.createDiv({ cls: 'pm-overview-title', text: project.title })
+    const titleRow = identity.createDiv('pm-overview-title-row')
+    titleRow.createDiv({ cls: 'pm-overview-title', text: project.title })
+    this.renderStatusChip(titleRow, project.filePath)
     const children = this.children(project).length
     const bits = [tn('overview.tasksDone', rollup.total, { done: rollup.done })]
     if (children) bits.push(tn('overview.subProjects', children))
@@ -362,6 +383,12 @@ export class ProjectOverviewView extends ItemView {
       const row = section.createDiv('pm-overview-child')
       renderGlyph(row.createSpan({ cls: 'pm-overview-child-icon' }), { icon: child.icon, color: child.color })
       row.createSpan({ cls: 'pm-overview-child-title', text: child.title })
+      const status = projectRowStatus(this.plugin, child.path)
+      if (status?.preset) {
+        row.addClass('pm-overview-child--status')
+        row.style.setProperty('--pm-project-status-color', status.color)
+      }
+      this.renderStatusChip(row, child.path)
       if (this.plugin.index.isArchived(child.path)) {
         new Chip(row).setLabel(t('common.archived')).setVariant('outline').setSize('sm')
       }
@@ -371,10 +398,10 @@ export class ProjectOverviewView extends ItemView {
         .setColor(child.color)
         .setShowLabel(true)
       row.createSpan({ cls: 'pm-overview-child-count', text: `${done}/${total}` })
-      row.addEventListener(
-        'click',
-        safeAsync(() => this.plugin.router.openProjectLink(child.path))
-      )
+      row.addEventListener('click', (e) => {
+        if ((e.target as HTMLElement).closest('.pm-chip--interactive')) return
+        safeAsync(() => this.plugin.router.openProjectLink(child.path))()
+      })
     }
   }
 

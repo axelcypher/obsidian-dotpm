@@ -121,3 +121,25 @@
   font-weight: 400;
   font-variant-numeric: tabular-nums;
 }
+
+/* A project in a status preset is tinted in its color, with a stripe down its first cell. */
+.pm-project-row--status {
+  background: color-mix(in srgb, var(--pm-project-status-color) 9%, transparent);
+}
+.pm-table-row.pm-project-row--status:not(.pm-table-row--selected):hover {
+  background: color-mix(in srgb, var(--pm-project-status-color) 16%, transparent);
+}
+.pm-project-row--status > td:first-child {
+  box-shadow: inset 3px 0 0 var(--pm-project-status-color);
+}
+.pm-project-status--empty {
+  color: var(--text-faint);
+  border-style: dashed;
+}
+.pm-project-group-swatch {
+  flex-shrink: 0;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--pm-project-status-color);
+}

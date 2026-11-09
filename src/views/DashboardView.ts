@@ -63,8 +63,15 @@ const sortFields = (): SortField<ProjectSortKey>[] => [
   { id: 'due', label: t('columns.due') }
 ]
 
+const GROUP_OPTIONS: ProjectGroupBy[] = ['none', 'folder', 'tag', 'status']
+
 const groupLabel = (group: ProjectGroupBy): string =>
-  ({ none: t('header.groupNone'), folder: t('header.groupFolder'), tag: t('header.groupTag') })[group]
+  ({
+    none: t('header.groupNone'),
+    folder: t('header.groupFolder'),
+    tag: t('header.groupTag'),
+    status: t('header.groupStatus')
+  })[group]
 
 export class DashboardView extends ItemView {
   private plugin: PMPlugin
@@ -308,7 +315,7 @@ export class DashboardView extends ItemView {
             const draw = (): void => {
               parent.empty()
               const list = parent.createDiv('pm-pop-list')
-              for (const option of ['none', 'folder', 'tag'] as const) {
+              for (const option of GROUP_OPTIONS) {
                 renderOptionRow(list, {
                   label: groupLabel(option),
                   selected: this.state.group === option,
@@ -355,7 +362,7 @@ export class DashboardView extends ItemView {
 
   private openGroupMenu(anchor: HTMLElement): void {
     const menu = new Menu()
-    for (const option of ['none', 'folder', 'tag'] as const) {
+    for (const option of GROUP_OPTIONS) {
       menu.addItem((item) =>
         item
           .setTitle(groupLabel(option))
@@ -428,8 +435,12 @@ export class DashboardView extends ItemView {
   private renderList(): void {
     const { plugin } = this
     this.items = projectListItems(plugin)
-    const { groups, shown, total } = arrangeProjects(this.items, this.state, this.text, (path) =>
-      plugin.isProjectCollapsed(path)
+    const { groups, shown, total } = arrangeProjects(
+      this.items,
+      this.state,
+      this.text,
+      (path) => plugin.isProjectCollapsed(path),
+      { byStatus: plugin.settings.sortProjectsByStatus }
     )
     this.shown = shown
     this.syncHeader(shown, total)

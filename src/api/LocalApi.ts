@@ -41,6 +41,7 @@ function refOf(project: Project): ProjectRef {
     customFields: project.customFields,
     parentPath: project.parentPath,
     archived: project.archived === true,
+    status: '',
     ownStatusIds: project.config?.statuses?.map((status) => status.id) ?? null,
     completeStatusIds: project.config?.statuses?.filter((status) => status.complete).map((status) => status.id) ?? null,
     autoArchiveDays: project.config?.autoArchiveDays ?? null

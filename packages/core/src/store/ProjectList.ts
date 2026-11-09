@@ -18,11 +18,20 @@ export interface ProjectListItem {
   /** The folder holding the project's own folder, `''` at the vault root. */
   folder: string
   tags: string[]
+  /** The id of the project's status preset; `''` without one or with a value no preset names. */
+  status: string
+  /** The preset's place in status order; past the last preset without one. */
+  statusRank: number
   done: number
   total: number
   overdue: number
   latestDue: string
   children: ProjectListItem[]
+}
+
+export interface ArrangeOptions {
+  /** Put siblings in status order first; the list's own sort then orders each status. */
+  byStatus?: boolean
 }
 
 export interface ProjectListRow {
@@ -70,7 +79,8 @@ function matches(item: ProjectListItem, filter: ProjectListFilter, text: string)
 
 const ratio = (item: ProjectListItem): number => (item.total ? item.done / item.total : 0)
 
-function compareItems(a: ProjectListItem, b: ProjectListItem, sort: ProjectSortRule[]): number {
+function compareItems(a: ProjectListItem, b: ProjectListItem, sort: ProjectSortRule[], byStatus: boolean): number {
+  if (byStatus && a.statusRank !== b.statusRank) return a.statusRank - b.statusRank
   for (const { key, dir } of sort) {
     // A project with no dates sorts after every dated one, whichever way the dates run.
     if (key === 'due' && (!a.latestDue || !b.latestDue)) {
@@ -110,8 +120,10 @@ export function arrangeProjects(
   roots: ProjectListItem[],
   state: ProjectListState,
   text: string,
-  isCollapsed: (path: string) => boolean
+  isCollapsed: (path: string) => boolean,
+  options: ArrangeOptions = {}
 ): { groups: ProjectListGroup[]; shown: number; total: number } {
+  const byStatus = options.byStatus ?? false
   const active = isProjectQueryActive(state.filter, text)
   const hit = new Set(
     allProjectItems(roots)
@@ -120,7 +132,7 @@ export function arrangeProjects(
   )
   const kept = (item: ProjectListItem): boolean => hit.has(item.path) || item.children.some(kept)
   const ordered = (items: ProjectListItem[]): ProjectListItem[] =>
-    items.filter(kept).sort((a, b) => compareItems(a, b, state.sort))
+    items.filter(kept).sort((a, b) => compareItems(a, b, state.sort, byStatus))
 
   const flatten = (items: ProjectListItem[], trail: boolean[], rows: ProjectListRow[]): ProjectListRow[] => {
     const list = ordered(items)
@@ -151,11 +163,29 @@ export function arrangeProjects(
   }
 
   const byKey = new Map<string, ProjectListItem[]>()
+  const rankOf = new Map<string, number>()
   for (const root of roots) {
-    const keys = state.group === 'folder' ? [root.folder] : root.tags.length ? root.tags : ['']
+    const keys =
+      state.group === 'folder'
+        ? [root.folder]
+        : state.group === 'status'
+          ? [root.status]
+          : root.tags.length
+            ? root.tags
+            : ['']
     for (const key of keys) byKey.set(key, [...(byKey.get(key) ?? []), root])
+    if (state.group === 'status') rankOf.set(root.status, root.statusRank)
   }
-  const keys = [...byKey.keys()].sort((a, b) => (a === '' ? 1 : b === '' ? -1 : a.localeCompare(b)))
+  // Status groups follow the presets; folders and tags go by name. Either way "none" comes last.
+  const keys = [...byKey.keys()].sort((a, b) =>
+    a === ''
+      ? 1
+      : b === ''
+        ? -1
+        : state.group === 'status'
+          ? (rankOf.get(a) ?? 0) - (rankOf.get(b) ?? 0)
+          : a.localeCompare(b)
+  )
   const groups = keys
     .map((key) => {
       const members = byKey.get(key) ?? []

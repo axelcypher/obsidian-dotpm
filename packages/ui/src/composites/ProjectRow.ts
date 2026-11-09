@@ -1,4 +1,5 @@
 import { type ProjectListField, t, tn } from '@dotpm/core'
+import { formatBadgeText, isIconName } from '../icons'
 import { AvatarStack, type AvatarPerson } from '#primitives/AvatarStack'
 import { Chip } from '#primitives/Chip'
 import { CollapseToggle } from '#primitives/CollapseToggle'
@@ -7,6 +8,15 @@ import { ProgressBar } from '#primitives/ProgressBar'
 import { renderDueChip, type DueUrgency } from './dueChip'
 import { renderGlyph } from './properties'
 import { renderTreeGuides } from './treeGuides'
+
+/** A project's status as its row shows it. */
+export interface ProjectRowStatus {
+  label: string
+  color: string
+  icon: string
+  /** False for a value no preset names: it shows as written, and the row isn't tinted. */
+  preset: boolean
+}
 
 export interface ProjectRowProps {
   title: string
@@ -29,6 +39,10 @@ export interface ProjectRowProps {
   /** Formatted by the caller; empty when nothing in the project has a date. */
   dueLabel: string
   dueUrgency: DueUrgency
+  /** Null or left out for a project without a status. A preset tints the row in its color. */
+  status?: ProjectRowStatus | null
+  /** Opens the status picker from the status cell. Left out, the cell only shows the status. */
+  onStatus?: (e: MouseEvent) => void
   /** Leave it out while the list can't collapse, such as during a search: the row then has no toggle. */
   onToggleCollapsed?: () => void
   onClick: () => void
@@ -45,6 +59,10 @@ export class ProjectRow {
     this.el = tbody.createEl('tr', { cls: 'pm-table-row pm-project-row' })
     if (props.archived) this.el.addClass('pm-table-row--archived')
     this.el.style.setProperty('--depth', String(props.depth))
+    if (props.status?.preset) {
+      this.el.addClass('pm-project-row--status')
+      this.el.style.setProperty('--pm-project-status-color', props.status.color)
+    }
 
     const expand = this.el.createEl('td', { cls: 'pm-table-cell-expand' })
     const { onToggleCollapsed } = props
@@ -81,8 +99,38 @@ export class ProjectRow {
   }
 }
 
+/** A project's status, or an empty chip to set one from. With `onClick`, the chip opens the status picker. */
+export function renderProjectStatusChip(
+  parent: HTMLElement,
+  status: ProjectRowStatus | null,
+  onClick?: (e: MouseEvent) => void
+): Chip {
+  const chip = new Chip(parent).setSize('sm')
+  if (status) {
+    chip
+      .setLabel(formatBadgeText(status.icon, status.label))
+      .setColor(status.preset ? status.color : 'var(--text-muted)')
+      .setVariant(status.preset ? 'solid' : 'outline')
+      .setDot(!status.icon)
+    if (isIconName(status.icon)) chip.setLeadingIcon(status.icon)
+  } else {
+    chip.setLabel(t('projectStatus.none')).setVariant('outline')
+    chip.el.addClass('pm-project-status--empty')
+  }
+  if (onClick) chip.setTooltip(t('projectStatus.change')).onClick(onClick)
+  return chip
+}
+
+function renderStatusCell(cell: HTMLElement, props: ProjectRowProps): void {
+  cell.addClass('pm-table-cell-project-status')
+  renderProjectStatusChip(cell, props.status ?? null, props.onStatus)
+}
+
 function renderCell(cell: HTMLElement, field: ProjectListField, props: ProjectRowProps): void {
   switch (field) {
+    case 'status':
+      renderStatusCell(cell, props)
+      return
     case 'progress':
       cell.addClass('pm-table-cell-progress')
       new ProgressBar(cell)

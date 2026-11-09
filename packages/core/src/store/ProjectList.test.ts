@@ -15,6 +15,8 @@ function item(title: string, overrides: Partial<ProjectListItem> = {}): ProjectL
     title,
     folder: '',
     tags: [],
+    status: '',
+    statusRank: 99,
     done: 0,
     total: 0,
     overdue: 0,
@@ -108,6 +110,45 @@ describe('arrangeProjects', () => {
   })
 })
 
+describe('arrangeProjects by status', () => {
+  const active = (title: string, overrides: Partial<ProjectListItem> = {}): ProjectListItem =>
+    item(title, { status: 'active', statusRank: 0, ...overrides })
+  const paused = (title: string, overrides: Partial<ProjectListItem> = {}): ProjectListItem =>
+    item(title, { status: 'on-hold', statusRank: 2, ...overrides })
+
+  it('puts siblings in status order, unknown statuses last, stored order within a status', () => {
+    const list = [item('None'), paused('Paused'), active('Second'), active('First')]
+    const result = arrangeProjects(list, state(), '', never, { byStatus: true })
+    expect(titles(result)).toEqual([['Second', 'First', 'Paused', 'None']])
+  })
+
+  it('applies the list sort within each status', () => {
+    const list = [paused('B'), active('Zeta'), paused('A'), active('Alpha')]
+    const sort = [{ key: 'title' as const, dir: 'asc' as const }]
+    expect(titles(arrangeProjects(list, state({ sort }), '', never, { byStatus: true }))).toEqual([
+      ['Alpha', 'Zeta', 'A', 'B']
+    ])
+  })
+
+  it('orders sub-projects by status under their parent', () => {
+    const parent = active('Parent', { children: [item('Loose child'), active('Active child')] })
+    const result = arrangeProjects([paused('Other'), parent], state(), '', never, { byStatus: true })
+    expect(titles(result)).toEqual([['Parent', 'Active child', 'Loose child', 'Other']])
+  })
+
+  it('leaves the stored order alone unless asked', () => {
+    const list = [paused('Paused'), active('Active')]
+    expect(titles(arrangeProjects(list, state(), '', never))).toEqual([['Paused', 'Active']])
+  })
+
+  it('groups top-level projects by status in preset order, no status last', () => {
+    const list = [item('None'), paused('Paused'), active('Active')]
+    const result = arrangeProjects(list, state({ group: 'status' }), '', never)
+    expect(result.groups.map((group) => group.key)).toEqual(['active', 'on-hold', ''])
+    expect(titles(result)).toEqual([['Active'], ['Paused'], ['None']])
+  })
+})
+
 describe('project helpers', () => {
   it('reads progress from the rolled-up counts', () => {
     expect(projectProgress(item('Empty'))).toBe('not-started')
@@ -125,7 +166,7 @@ describe('project helpers', () => {
 
 describe('tidyProjectFields', () => {
   it('drops the list once every column shows in the default order', () => {
-    expect(tidyProjectFields(['progress', 'tasks', 'members', 'due'])).toBeUndefined()
+    expect(tidyProjectFields(['status', 'progress', 'tasks', 'members', 'due'])).toBeUndefined()
     expect(tidyProjectFields(undefined)).toBeUndefined()
   })
 

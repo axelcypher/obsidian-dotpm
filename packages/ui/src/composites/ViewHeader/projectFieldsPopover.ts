@@ -12,6 +12,7 @@ export interface ProjectFieldsProps {
 
 export const projectFieldLabel = (field: ProjectListField): string =>
   ({
+    status: t('columns.status'),
     progress: t('columns.progress'),
     tasks: t('columns.tasks'),
     members: t('columns.members'),

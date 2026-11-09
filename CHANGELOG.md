@@ -7,6 +7,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [2.14.0] - 2026-11-09
+
+### Added
+
+- The local API and MCP can now change and remove what they could only add: meeting notes (`update_meeting`, `delete_meeting`), participants (`update_participant`, `remove_participant`) and timesheet entries (`update_time_entry`, `delete_time_entry`), with guards that refuse a change when the row moved since it was read
+- Project tags over the API: listings carry them and `set_project_tags` replaces them
+- `get_presets` and `update_presets` read and replace the status and type presets and the project data fields
+- `sync_project_sheets` and `set_up_project_data` run the spreadsheet sync and set-up from a client
+- Project data reads say where the spreadsheet is and whether its last sync worked
+- The change feed reports changes to project data, participants, meetings and timesheets
+
 ## [2.13.0] - 2026-11-09
 
 ### Added

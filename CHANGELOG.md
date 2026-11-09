@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [2.12.0] - 2026-11-09
+
+### Changed
+
+- The project data spreadsheet is formatted: each group a grey band with its name, then label in bold, key and value per row, in Arial. Spreadsheets written before are written again in the new layout.
+- New vaults start with project data fields for the project (code, title), the client (first and last name, street, postcode, town, phone, email) and the building plot (address, postcode, town, district, Flur, parcel, area)
+
 ## [2.11.0] - 2026-11-09
 
 ### Highlights

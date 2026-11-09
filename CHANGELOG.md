@@ -7,6 +7,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [2.8.0] - 2026-11-09
+
+### Highlights
+
+- **Project types:** Mark what a project is about, such as a conversion, an extension or a listed building, and see it at a glance in the project list. A project can have several.
+
+### Added
+
+- Added project types, toggled from a type column in the project list and from the project overview
+- Added "Project types" to the settings, with the presets' names, colors, icons and order and the note property they are kept in
+- Added a tags column to the project list, showing the project note's own tags
+- The project list's "Fields" menu now shows, hides and reorders the type and tags columns
+
+### Changed
+
+- New project status presets get a readable id from their name right away
+
 ## [2.7.0] - 2026-11-09
 
 First release of the private revamp, *dotpm (Revamped)*.

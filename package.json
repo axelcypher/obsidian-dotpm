@@ -1,6 +1,6 @@
 {
   "name": "axlc-dotpm-revamped",
-  "version": "2.9.0",
+  "version": "2.10.0",
   "private": true,
   "description": "Project management over plain Markdown notes. Table, Gantt and Kanban views with scheduling, dependencies and custom fields, project statuses with quick switching, plus a local API for agents and scripts. Private revamp of dotpm by Stepan Kropachev and the dotpm contributors.",
   "author": "axelcypher",

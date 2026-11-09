@@ -7,6 +7,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [2.10.0] - 2026-11-09
+
+### Added
+
+- Added "Show participants", a searchable window with everyone on a project, from the project overview, the command palette and the project's context menu
+
+### Changed
+
+- The project overview lists project data as a compact two-column list in smaller type; long values fold after three lines
+- The project overview's side column only counts the participants instead of listing them all
+- Sections in the project overview's side column sit closer together
+
 ## [2.9.0] - 2026-11-09
 
 ### Highlights

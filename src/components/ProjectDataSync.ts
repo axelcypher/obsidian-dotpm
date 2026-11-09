@@ -9,8 +9,7 @@ import {
   projectFolderFromText,
   rowValues,
   sheetSyncAction,
-  t,
-  tn
+  t
 } from '@dotpm/core'
 import {
   readProjectDataWorkbook,
@@ -154,7 +153,7 @@ export class ProjectDataSync {
    * Gives every project a data note, taking the project folder from a "Projektordner:"
    * line of its description where the note has none yet, then syncs every sheet.
    */
-  async setUpAllProjects(): Promise<void> {
+  async setUpAllProjects(): Promise<{ created: number; folders: number }> {
     const { plugin } = this
     const key = plugin.settings.projectFolderProperty
     let created = 0
@@ -172,14 +171,10 @@ export class ProjectDataSync {
       })
       folders++
     }
-    plugin.showNotice(
-      t('sheet.setUpDone', { created: tn('sheet.notes', created), folders: tn('sheet.folders', folders) }),
-      6000
-    )
     // The notes just written reach the metadata cache a moment later.
-    window.setTimeout(() => {
-      void this.syncAll()
-    }, WRITE_DELAY_MS)
+    await new Promise((resolve) => window.setTimeout(resolve, WRITE_DELAY_MS))
+    await this.syncAll()
+    return { created, folders }
   }
 
   private projectOfDataNote(path: string): string | null {

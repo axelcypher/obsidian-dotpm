@@ -72,7 +72,8 @@ function summarize(plugin: PMPlugin, project: Project): ProjectSummary {
     archived: plugin.index.isArchived(project.filePath),
     taskCount: live.length,
     doneCount: live.filter((f) => complete.has(f.task.status)).length,
-    ...projectLabelIds(plugin, plugin.index.projectRef(project.filePath) ?? { status: '', types: [] })
+    ...projectLabelIds(plugin, plugin.index.projectRef(project.filePath) ?? { status: '', types: [] }),
+    tags: [...(plugin.index.projectRef(project.filePath)?.tags ?? [])]
   }
 }
 

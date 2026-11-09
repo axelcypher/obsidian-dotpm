@@ -1,15 +1,26 @@
 import type {
   Participant,
   Project,
+  ProjectDataField,
   ProjectDataValue,
   ProjectLabelConfig,
   ResolvedProjectConfig,
-  Task
+  Task,
+  TimesheetEntry
 } from '@dotpm/core'
-import { HEX_COLOR, isValidDataKey, makeTask, parsePlainDate } from '@dotpm/core'
+import {
+  DEFAULT_PALETTE_COLOR,
+  HEX_COLOR,
+  isValidDataKey,
+  makeTask,
+  parsePlainDate,
+  projectDataKeyFor,
+  projectLabelIdFor
+} from '@dotpm/core'
 import * as v from 'valibot'
 import {
   ApiRequestError,
+  type PresetsResource,
   type MeetingCreate,
   type TimeEntryCreate,
   type ProjectCreate,
@@ -461,4 +472,216 @@ export function tasksFromResources(resources: TaskResource[]): Task[] {
     else roots.push(task)
   }
   return roots
+}
+
+const INDEX = v.pipe(
+  integerField('index', 0, 1_000_000),
+  v.description('Position in the list as last read, starting at 0')
+)
+
+function hoursField(name: string): v.GenericSchema<number, number> {
+  return v.pipe(
+    v.number(`${name} must be a number`),
+    v.check((hours) => hours > 0 && hours <= 24, `${name} must be more than 0 and at most 24`)
+  )
+}
+
+export const PROJECT_TAGS_FIELDS = {
+  tags: listField('tags', 'Tags without #; they replace the current ones, [] clears them')
+}
+
+const MEETING_PATH = requiredText('path', 'Path of the meeting note, from list_meetings')
+
+export const MEETING_UPDATE_FIELDS = {
+  path: MEETING_PATH,
+  title: v.optional(requiredText('title', 'New title; renames the note')),
+  date: v.optional(dateField('date')),
+  content: v.optional(stringField('content', 'New Markdown of the minutes, replacing the old'))
+}
+
+export const MEETING_REF_FIELDS = { path: MEETING_PATH }
+
+const EXPECTED_NAME = v.optional(
+  stringField('expectedName', 'The name list_participants showed at that index; a different one refuses the change')
+)
+
+export const PARTICIPANT_UPDATE_FIELDS = {
+  index: INDEX,
+  expectedName: EXPECTED_NAME,
+  name: v.optional(requiredText('name', 'New name')),
+  role: v.optional(stringField('role', 'New role')),
+  company: v.optional(stringField('company', 'New company')),
+  email: v.optional(stringField('email', 'New email address')),
+  phone: v.optional(stringField('phone', 'New phone number'))
+}
+
+export const PARTICIPANT_REF_FIELDS = { index: INDEX, expectedName: EXPECTED_NAME }
+
+const EXPECTED_ENTRY = {
+  expectedDate: v.optional(dateField('expectedDate')),
+  expectedHours: v.optional(
+    v.pipe(v.number('expectedHours must be a number'), v.description('The hours get_timesheet showed at that index'))
+  )
+}
+
+export const TIME_ENTRY_UPDATE_FIELDS = {
+  index: INDEX,
+  ...EXPECTED_ENTRY,
+  date: v.optional(dateField('date')),
+  hours: v.optional(hoursField('hours')),
+  person: v.optional(stringField('person', 'Who did the work')),
+  activity: v.optional(stringField('activity', 'What was done'))
+}
+
+export const TIME_ENTRY_REF_FIELDS = { index: INDEX, ...EXPECTED_ENTRY }
+
+const LABEL_PRESET = v.object(
+  {
+    id: v.optional(stringField('id', 'The value written into notes; derived from the label when left out')),
+    label: requiredText('label', 'Name shown in Obsidian'),
+    color: v.optional(
+      v.pipe(
+        v.string('color must be a hex color like #8b72be'),
+        v.regex(HEX_COLOR, 'color must be a hex color like #8b72be')
+      )
+    ),
+    icon: v.optional(stringField('icon', 'An emoji or a Lucide icon name'))
+  },
+  missingKey('each preset must be an object', 'preset ')
+)
+
+const DATA_FIELD = v.object(
+  {
+    key: v.optional(
+      v.pipe(
+        v.string('key must be a string'),
+        v.check(isValidDataKey, 'property names start with a letter or digit and hold only letters, digits, - and _')
+      )
+    ),
+    label: requiredText('label', 'Name shown on the overview'),
+    group: v.optional(stringField('group', 'Fields with the same group show together'))
+  },
+  missingKey('each field must be an object', 'field ')
+)
+
+export const PRESETS_FIELDS = {
+  projectStatuses: v.optional(
+    v.pipe(
+      v.array(LABEL_PRESET, 'projectStatuses must be a list'),
+      v.description('Every status preset in list order; replaces the current list')
+    )
+  ),
+  projectTypes: v.optional(
+    v.pipe(
+      v.array(LABEL_PRESET, 'projectTypes must be a list'),
+      v.description('Every type preset; replaces the current list')
+    )
+  ),
+  projectDataFields: v.optional(
+    v.pipe(
+      v.array(DATA_FIELD, 'projectDataFields must be a list'),
+      v.description('Every project data field in overview order; replaces the current list')
+    )
+  )
+}
+
+export const SHEET_SYNC_FIELDS = {
+  projectId: v.optional(stringField('projectId', 'One project to sync; every project when left out'))
+}
+
+const PROJECT_TAGS = v.object(PROJECT_TAGS_FIELDS, missingKey('expected an object'))
+const MEETING_UPDATE = v.object(MEETING_UPDATE_FIELDS, missingKey('expected an object'))
+const MEETING_REF = v.object(MEETING_REF_FIELDS, missingKey('expected an object'))
+const PARTICIPANT_UPDATE = v.object(PARTICIPANT_UPDATE_FIELDS, missingKey('expected an object'))
+const PARTICIPANT_REF = v.object(PARTICIPANT_REF_FIELDS, missingKey('expected an object'))
+const TIME_ENTRY_UPDATE = v.object(TIME_ENTRY_UPDATE_FIELDS, missingKey('expected an object'))
+const TIME_ENTRY_REF = v.object(TIME_ENTRY_REF_FIELDS, missingKey('expected an object'))
+const PRESETS = v.object(PRESETS_FIELDS, missingKey('expected an object'))
+const SHEET_SYNC = v.object(SHEET_SYNC_FIELDS, missingKey('expected an object'))
+
+export function parseProjectTags(input: unknown): string[] {
+  const tags = parse(PROJECT_TAGS, input)
+    .tags.map((tag) => tag.trim().replace(/^#/, ''))
+    .filter(Boolean)
+  return [...new Set(tags)]
+}
+
+export interface MeetingUpdate {
+  path: string
+  title?: string
+  date?: string
+  content?: string
+}
+
+export function parseMeetingUpdate(input: unknown): MeetingUpdate {
+  const update = parse(MEETING_UPDATE, input)
+  return { ...update, title: update.title?.trim(), date: update.date || undefined }
+}
+
+export function parseMeetingRef(input: unknown): string {
+  return parse(MEETING_REF, input).path
+}
+
+export interface RowRef {
+  index: number
+  expectedName?: string
+  expectedDate?: string
+  expectedHours?: number
+}
+
+export function parseParticipantUpdate(input: unknown): RowRef & { patch: Partial<Participant> } {
+  const { index, expectedName, ...patch } = parse(PARTICIPANT_UPDATE, input)
+  const trimmed = Object.fromEntries(Object.entries(patch).map(([key, value]) => [key, value?.trim()]))
+  return { index, expectedName, patch: trimmed }
+}
+
+export function parseParticipantRef(input: unknown): RowRef {
+  return parse(PARTICIPANT_REF, input)
+}
+
+export function parseTimeEntryUpdate(input: unknown): RowRef & { patch: Partial<TimesheetEntry> } {
+  const { index, expectedDate, expectedHours, ...patch } = parse(TIME_ENTRY_UPDATE, input)
+  if (patch.date === '') delete patch.date
+  return { index, expectedDate: expectedDate || undefined, expectedHours, patch }
+}
+
+export function parseTimeEntryRef(input: unknown): RowRef {
+  const ref = parse(TIME_ENTRY_REF, input)
+  return { ...ref, expectedDate: ref.expectedDate || undefined }
+}
+
+function labelPresets(entries: v.InferOutput<typeof LABEL_PRESET>[], what: string): ProjectLabelConfig[] {
+  const taken: string[] = []
+  return entries.map((entry) => {
+    const id = entry.id?.trim() || projectLabelIdFor(entry.label, taken) || `${what}-${taken.length + 1}`
+    if (taken.includes(id)) invalid(`two ${what} presets share the id "${id}"`)
+    taken.push(id)
+    return { id, label: entry.label.trim(), color: entry.color ?? DEFAULT_PALETTE_COLOR, icon: entry.icon ?? '' }
+  })
+}
+
+function dataFields(entries: v.InferOutput<typeof DATA_FIELD>[]): ProjectDataField[] {
+  const taken: string[] = []
+  return entries.map((entry) => {
+    const group = entry.group?.trim() ?? ''
+    const label = entry.label.trim()
+    const key = entry.key?.trim() || projectDataKeyFor(group, label, taken)
+    if (taken.includes(key)) invalid(`two project data fields share the key "${key}"`)
+    taken.push(key)
+    return { key, label, group }
+  })
+}
+
+/** The lists given, with ids and keys filled in from labels where a client left them out. */
+export function parsePresets(input: unknown): Partial<PresetsResource> {
+  const presets = parse(PRESETS, input)
+  const out: Partial<PresetsResource> = {}
+  if (presets.projectStatuses) out.projectStatuses = labelPresets(presets.projectStatuses, 'status')
+  if (presets.projectTypes) out.projectTypes = labelPresets(presets.projectTypes, 'type')
+  if (presets.projectDataFields) out.projectDataFields = dataFields(presets.projectDataFields)
+  return out
+}
+
+export function parseSheetSync(input: unknown): string | undefined {
+  return parse(SHEET_SYNC, input ?? {}).projectId?.trim() || undefined
 }

@@ -79,6 +79,17 @@ describe('createMcpHandler', () => {
       'create_meeting',
       'get_timesheet',
       'log_time',
+      'set_project_tags',
+      'update_meeting',
+      'delete_meeting',
+      'update_participant',
+      'remove_participant',
+      'update_time_entry',
+      'delete_time_entry',
+      'get_presets',
+      'update_presets',
+      'sync_project_sheets',
+      'set_up_project_data',
       'list_changes'
     ])
     expect(listed[1].inputSchema).toMatchObject({ required: ['projectId'] })
@@ -216,6 +227,60 @@ describe('createMcpHandler', () => {
     })
     const noHours = await call('log_time', { projectId: 'p1', hours: 0 })
     expect(noHours.error?.message ?? JSON.stringify(noHours.result)).toContain('hours must be more than 0')
+  })
+
+  it('edits and removes rows by index, refusing a list that moved', async () => {
+    await call('add_participant', { projectId: 'p1', name: 'Anna' })
+    await call('add_participant', { projectId: 'p1', name: 'Bernd' })
+    expect(
+      parsed(await call('update_participant', { projectId: 'p1', index: 1, expectedName: 'Bernd', role: 'Statik' }))
+    ).toMatchObject([{ name: 'Anna' }, { name: 'Bernd', role: 'Statik' }])
+    const moved = await call('remove_participant', { projectId: 'p1', index: 0, expectedName: 'Bernd' })
+    expect(moved.result).toMatchObject({ isError: true })
+    expect(parsed(moved)).toMatchObject({ error: 'conflict' })
+    await call('log_time', { projectId: 'p1', hours: 2, date: '2026-11-09' })
+    expect(
+      parsed(await call('update_time_entry', { projectId: 'p1', index: 0, expectedHours: 2, hours: 2.5 }))
+    ).toMatchObject({ total: 2.5 })
+    expect(parsed(await call('delete_time_entry', { projectId: 'p1', index: 0 }))).toMatchObject({
+      total: 0,
+      entries: []
+    })
+  })
+
+  it('updates meetings and tags, and reads and replaces the presets', async () => {
+    const meeting = parsed(await call('create_meeting', { projectId: 'p1', title: 'Abgleich' })) as { path: string }
+    expect(
+      parsed(await call('update_meeting', { projectId: 'p1', path: meeting.path, content: '- neu' }))
+    ).toMatchObject({ content: '- neu' })
+    expect(parsed(await call('delete_meeting', { projectId: 'p1', path: meeting.path }))).toEqual({ deleted: true })
+    expect(
+      parsed(await call('set_project_tags', { projectId: 'p1', tags: ['#client', 'web', 'client'] }))
+    ).toMatchObject({
+      tags: ['client', 'web']
+    })
+    const presets = parsed(
+      await call('update_presets', {
+        projectTypes: [{ label: 'Umbau' }, { id: 'denkmal', label: 'Denkmal', color: '#c47070' }],
+        projectDataFields: [{ group: 'Bauherr', label: 'Name' }]
+      })
+    )
+    expect(presets).toMatchObject({
+      projectTypes: [
+        { id: 'umbau', label: 'Umbau' },
+        { id: 'denkmal', color: '#c47070' }
+      ],
+      projectDataFields: [{ key: 'bauherr-name', label: 'Name', group: 'Bauherr' }]
+    })
+    const clash = await call('update_presets', {
+      projectTypes: [
+        { label: 'A', id: 'x' },
+        { label: 'B', id: 'x' }
+      ]
+    })
+    expect(JSON.stringify(clash)).toContain('share the id')
+    expect(parsed(await call('sync_project_sheets', {}))).toEqual({ checked: 1, problems: [] })
+    expect(parsed(await call('set_up_project_data', {}))).toEqual({ created: 1, folders: 0 })
   })
 
   it('answers a notification with 202 and no body', async () => {

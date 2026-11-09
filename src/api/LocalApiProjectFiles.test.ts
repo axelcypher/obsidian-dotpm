@@ -31,16 +31,18 @@ function fileAt(app: App, path: string): TFile {
 /** The plugin as the API sees it, with the label writes done the way the plugin does them. */
 function newApi(): { api: LocalApi; app: FakeApp; store: ProjectStore; index: VaultIndex } {
   const { app } = makeFakeApp({ liveMetadataCache: true })
+  const settings = structuredClone(SETTINGS)
   const typed = app as unknown as App
-  const index = new VaultIndex(typed, () => SETTINGS)
-  const store = new ProjectStore(typed, () => SETTINGS, index)
+  const index = new VaultIndex(typed, () => settings)
+  const store = new ProjectStore(typed, () => settings, index)
   const file = (path: string): TFile => fileAt(typed, path)
   const plugin = {
     app: typed,
     index,
     store,
-    settings: SETTINGS,
+    settings,
     refreshViews: () => undefined,
+    saveSettings: async () => undefined,
     setProjectStatus: async (path: string, status: string | null) => {
       await typed.fileManager.processFrontMatter(file(path), (fm: Record<string, unknown>) => {
         if (status) fm['status'] = status
@@ -53,7 +55,7 @@ function newApi(): { api: LocalApi; app: FakeApp; store: ProjectStore; index: Va
       })
     }
   } as unknown as PMPlugin
-  plugin.projectFiles = new ProjectFiles(typed, () => SETTINGS)
+  plugin.projectFiles = new ProjectFiles(typed, () => settings)
   plugin.projectDataSync = new ProjectDataSync(plugin)
   return { api: new LocalApi(plugin), app, store, index }
 }
@@ -152,6 +154,86 @@ describe('LocalApi project labels and files', () => {
       { person: 'Bastian', hours: 1 }
     ])
     await rejectsWith(api.logTime('missing', { hours: 1 }), 'not_found')
+  })
+
+  it('sets the project note tags and lists them', async () => {
+    expect((await api.setProjectTags(projectId, { tags: ['#client', 'web'] })).tags).toEqual(['client', 'web'])
+    index.build()
+    expect((await api.listProjects())[0].tags).toEqual(['client', 'web'])
+    expect((await api.setProjectTags(projectId, { tags: [] })).tags).toEqual([])
+  })
+
+  it('changes, renames and deletes a meeting note', async () => {
+    const meeting = await api.createMeeting(projectId, { title: 'Abgleich', date: '2026-11-09', content: '- alt' })
+    const renamed = await api.updateMeeting(projectId, {
+      path: meeting.path,
+      title: 'Abgleich Statik',
+      content: '- neu'
+    })
+    expect(renamed).toMatchObject({
+      path: 'Projects/Vogelsang/Meetings/2026-11-09 Abgleich Statik.md',
+      title: 'Abgleich Statik',
+      content: '- neu'
+    })
+    await rejectsWith(api.updateMeeting(projectId, { path: meeting.path, content: 'x' }), 'not_found')
+    await api.deleteMeeting(projectId, { path: renamed.path })
+    expect(await api.listMeetings(projectId)).toEqual([])
+  })
+
+  it('edits and removes participants by index, guarded by the name', async () => {
+    await api.addParticipant(projectId, { name: 'Anna', role: 'Statik' })
+    await api.addParticipant(projectId, { name: 'Bernd' })
+    const edited = await api.updateParticipant(projectId, { index: 1, expectedName: 'bernd', email: 'b@x.de' })
+    expect(edited[1]).toMatchObject({ name: 'Bernd', email: 'b@x.de' })
+    await rejectsWith(api.removeParticipant(projectId, { index: 0, expectedName: 'Bernd' }), 'conflict')
+    await rejectsWith(api.removeParticipant(projectId, { index: 5 }), 'not_found')
+    expect((await api.removeParticipant(projectId, { index: 0, expectedName: 'Anna' })).map((p) => p.name)).toEqual([
+      'Bernd'
+    ])
+  })
+
+  it('corrects and deletes timesheet entries, guarded by date and hours', async () => {
+    await api.logTime(projectId, { hours: 2, date: '2026-11-09' })
+    await api.logTime(projectId, { hours: 1, date: '2026-11-10' })
+    await rejectsWith(api.updateTimeEntry(projectId, { index: 1, expectedHours: 2, hours: 3 }), 'conflict')
+    const corrected = await api.updateTimeEntry(projectId, {
+      index: 1,
+      expectedDate: '2026-11-10',
+      hours: 1.5,
+      activity: 'Statik'
+    })
+    expect(corrected.entries[1]).toEqual({ date: '2026-11-10', hours: 1.5, person: 'Tobias', activity: 'Statik' })
+    expect((await api.removeTimeEntry(projectId, { index: 0 })).total).toBe(1.5)
+    await rejectsWith(api.removeTimeEntry('missing', { index: 0 }), 'not_found')
+  })
+
+  it('reads and replaces the presets, deriving ids and keys from labels', async () => {
+    const presets = await api.updatePresets({
+      projectTypes: [{ label: 'Bauen im Bestand' }],
+      projectDataFields: [{ group: 'B-Plan', label: 'Dachneigung' }]
+    })
+    expect(presets.projectTypes).toEqual([
+      { id: 'bauen-im-bestand', label: 'Bauen im Bestand', color: '#8a94a0', icon: '' }
+    ])
+    expect(presets.projectDataFields).toEqual([{ key: 'b-plan-dachneigung', label: 'Dachneigung', group: 'B-Plan' }])
+    expect((await api.getPresets()).projectStatuses.map((status) => status.id)).toContain('active')
+  })
+
+  it('records project file changes for pollers', async () => {
+    const plugin = (api as unknown as { plugin: PMPlugin }).plugin
+    expect(plugin).toBeDefined()
+    const detach = api.attach()
+    const { cursor } = await api.changes(null)
+    await api.logTime(projectId, { hours: 1 })
+    await api.addParticipant(projectId, { name: 'Anna' })
+    const page = await api.changes(cursor)
+    expect(page.changes.map((change) => [change.kind, change.op, change.projectId])).toEqual(
+      expect.arrayContaining([
+        ['timesheet', 'upsert', projectId],
+        ['participants', 'upsert', projectId]
+      ])
+    )
+    detach()
   })
 
   it('keeps label helpers in line with what the plugin writes', () => {

@@ -226,7 +226,13 @@ export default class PMPlugin extends Plugin {
     this.addCommand({
       id: 'set-up-project-data',
       name: t('commands.setUpProjectData'),
-      callback: safeAsync(() => this.projectDataSync.setUpAllProjects())
+      callback: safeAsync(async () => {
+        const { created, folders } = await this.projectDataSync.setUpAllProjects()
+        this.showNotice(
+          t('sheet.setUpDone', { created: tn('sheet.notes', created), folders: tn('sheet.folders', folders) }),
+          6000
+        )
+      })
     })
 
     this.addCommand({

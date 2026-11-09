@@ -41,7 +41,17 @@ A client that can only launch a command, or cannot send a header, can use `dotpm
 
 Tools: `list_projects`, `get_project`, `archive_project`, `create_project`, `list_tasks`, `get_task`, `search_tasks`, `create_task`, `update_task`, `move_task`, `archive_task`, `delete_task`, `list_changes`.
 
-Project status, types and files (revamp): `set_project_status`, `set_project_types`, `get_project_data`, `update_project_data`, `list_participants`, `add_participant`, `list_meetings`, `create_meeting`, `get_timesheet`, `log_time`.
+Project status, types, tags and files (revamp):
+
+- Labels: `set_project_status`, `set_project_types`, `set_project_tags`
+- Project data: `get_project_data`, `update_project_data`
+- Participants: `list_participants`, `add_participant`, `update_participant`, `remove_participant`
+- Meetings: `list_meetings`, `create_meeting`, `update_meeting`, `delete_meeting`
+- Timesheet: `get_timesheet`, `log_time`, `update_time_entry`, `delete_time_entry`
+- Presets: `get_presets`, `update_presets` (status and type presets, project data fields)
+- Spreadsheets: `sync_project_sheets`, `set_up_project_data`
+
+Participants and timesheet entries have no ids: they are addressed by their index in the list as last read. Pass `expectedName` (participants) or `expectedDate` and `expectedHours` (entries) and a row that moved since is refused with `conflict` instead of changing the wrong one. Meetings are addressed by the `path` `list_meetings` gives.
 
 Resources: `dotpm://projects/{id}` (the project with its tasks) and `dotpm://tasks/{id}`.
 
@@ -86,8 +96,19 @@ Send `Authorization: Bearer <token>` with every request except `GET /v1/health`.
 | `POST /v1/projects/{id}/meetings` | Create a meeting note from `title`, optional `date` (`YYYY-MM-DD`, today by default) and `content` (Markdown); answers `201` |
 | `GET /v1/projects/{id}/timesheet` | `{ projectId, entries, total, byPerson }`, each entry `{ date, hours, person, activity }` |
 | `POST /v1/projects/{id}/timesheet` | Book `hours` (more than 0, at most 24) with optional `date`, `person` (the one set in settings by default) and `activity`; answers `201` with the sheet |
+| `PATCH /v1/projects/{id}/timesheet` | Body `{ index, expectedDate?, expectedHours?, date?, hours?, person?, activity? }`; changes the entry at `index` |
+| `DELETE /v1/projects/{id}/timesheet` | Body `{ index, expectedDate?, expectedHours? }`; deletes the entry, answers with the sheet |
+| `PATCH /v1/projects/{id}/participants` | Body `{ index, expectedName?, name?, role?, company?, email?, phone? }`; changes the participant at `index` |
+| `DELETE /v1/projects/{id}/participants` | Body `{ index, expectedName? }`; removes the participant, answers with the rest |
+| `PATCH /v1/projects/{id}/meetings` | Body `{ path, title?, date?, content? }`; `content` replaces the minutes, `title` and `date` rename the note |
+| `DELETE /v1/projects/{id}/meetings` | Body `{ path }`; moves the note to the trash, answers `204` |
+| `PUT /v1/projects/{id}/tags` | Body `{ "tags": ["…"] }`, replacing the project note's tags; `[]` clears them |
+| `GET /v1/presets` | `{ projectStatuses, projectTypes, projectDataFields }` |
+| `PATCH /v1/presets` | Replace any of those lists, each whole; ids and keys are derived from labels when left out |
+| `POST /v1/sheets/sync` | Body `{ projectId? }`: sync one project's spreadsheet or all; answers `{ checked, problems }` |
+| `POST /v1/sheets/setup` | Give every project a data note, take folders from descriptions, sync the spreadsheets; answers `{ created, folders }` |
 
-A project in a listing also carries `status` (a preset id, the value as written when no preset names it, or null) and `types` (ids). The project data note is kept in step with its spreadsheet; a write through the API reaches the spreadsheet like an edit in Obsidian.
+A project in a listing also carries `status` (a preset id, the value as written when no preset names it, or null), `types` (ids) and `tags` (the project note's own, without `#`). The project data note is kept in step with its spreadsheet; a write through the API reaches the spreadsheet like an edit in Obsidian.
 
 Fields a client may write: `title`, `description`, `type` (`task`, `milestone`, `subtask`), `status`, `priority`, `start`, `due` (`YYYY-MM-DD` or empty), `progress` (0 to 100), `assignees`, `tags`, `dependencies` (task ids), `recurrence` (`{ interval, every, endDate? }` or null), `timeEstimate` (hours or null), `customFields` (an object keyed by field id).
 
@@ -106,7 +127,7 @@ Errors come back as `{ "error": { "code", "message" } }`:
 
 ## Change feed
 
-`GET /v1/changes` without `since` returns the current cursor and nothing else. Polling with that cursor returns everything that changed after it, oldest first, plus a new `cursor` for the next poll. Each entry is `{ seq, at, kind: "project" | "task", op: "upsert" | "delete", id, projectId }`.
+`GET /v1/changes` without `since` returns the current cursor and nothing else. Polling with that cursor returns everything that changed after it, oldest first, plus a new `cursor` for the next poll. Each entry is `{ seq, at, kind, op: "upsert" | "delete", id, projectId }`. `kind` is `project` or `task` with the id of one, or `data`, `participants`, `meeting` or `timesheet` for a project file, with the note's path as `id`.
 
 The server keeps about the last thousand changes. A response with `reset: true` means the cursor is older than that. List what you need again instead of applying changes.
 

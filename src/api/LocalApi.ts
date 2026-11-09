@@ -1,5 +1,4 @@
 import { TFile } from 'obsidian'
-import type { Participant, Project, ProjectDataRow, ProjectLabelConfig, Task } from '@dotpm/core'
 import {
   appendParticipant,
   displayName,
@@ -9,15 +8,42 @@ import {
   makeTask,
   meetingDate,
   meetingTitle,
+  meetingFileName,
   noteBody,
   parseParticipants,
   parseTimesheet,
+  removeParticipant,
+  removeTimesheetEntry,
   resolveProjectLabel,
+  sanitizeFileName,
   summarizeTimesheet,
-  today
+  locale,
+  today,
+  updateParticipant,
+  updateTimesheetEntry,
+  withNoteBody,
+  type Participant,
+  type Project,
+  type ProjectDataRow,
+  type ProjectLabelConfig,
+  type Task,
+  type TimesheetEntry
 } from '@dotpm/core'
 import {
   ApiRequestError,
+  parseMeetingRef,
+  parseMeetingUpdate,
+  parseParticipantRef,
+  parseParticipantUpdate,
+  parsePresets,
+  parseProjectTags,
+  parseSheetSync,
+  parseTimeEntryRef,
+  parseTimeEntryUpdate,
+  type PresetsResource,
+  type ProjectDataSetUp,
+  type RowRef,
+  type SheetSyncResult,
   parseMeetingCreate,
   parseParticipant,
   parseProjectDataWrite,
@@ -101,9 +127,29 @@ export class LocalApi implements DomainApi {
         if (!this.plugin.index.projectRef(path)) this.changeLog.forget(path)
       }
     })
+    // Project files are plain notes the store doesn't track; their changes are recorded by path.
+    const fileChanged = (path: string, op: 'upsert' | 'delete'): void => {
+      if (!path.endsWith('.md')) return
+      for (const ref of this.plugin.index.projectRefs(true)) {
+        const kind = this.plugin.projectFiles.kindOf(ref.path, path)
+        if (!kind) continue
+        this.changeLog.record(kind, op, path, ref.id)
+        return
+      }
+    }
+    const { metadataCache, vault } = this.plugin.app
+    const onCache = metadataCache.on('changed', (file) => fileChanged(file.path, 'upsert'))
+    const onDelete = vault.on('delete', (file) => fileChanged(file.path, 'delete'))
+    const onRename = vault.on('rename', (file, oldPath) => {
+      fileChanged(oldPath, 'delete')
+      fileChanged(file.path, 'upsert')
+    })
     return () => {
       offStore()
       offIndex()
+      metadataCache.offref(onCache)
+      vault.offref(onDelete)
+      vault.offref(onRename)
     }
   }
 
@@ -319,7 +365,14 @@ export class LocalApi implements DomainApi {
 
   private dataResource(ref: ProjectRef, rows: ProjectDataRow[]): ProjectDataResource {
     const folder = rows.find((row) => row.key === this.plugin.settings.projectFolderProperty)?.value
-    return { projectId: ref.id, folder: typeof folder === 'string' ? folder : '', rows }
+    const location = this.plugin.settings.projectDataSheetSync ? this.plugin.projectDataSync.location(ref.path) : null
+    const status = this.plugin.projectDataSync.status(ref.path)
+    return {
+      projectId: ref.id,
+      folder: typeof folder === 'string' ? folder : '',
+      rows,
+      sheet: location ? { path: location.path, ok: status?.ok ?? true, message: status?.message ?? '' } : null
+    }
   }
 
   async listParticipants(projectId: string): Promise<Participant[]> {
@@ -377,6 +430,175 @@ export class LocalApi implements DomainApi {
     return this.timesheet(ref, await this.read(this.plugin.projectFiles.path(ref.path, 'timesheet')))
   }
 
+  async setProjectTags(projectId: string, input: unknown): Promise<ProjectResource> {
+    const ref = this.refById(projectId)
+    const tags = parseProjectTags(input)
+    const note = this.plugin.app.vault.getAbstractFileByPath(ref.path)
+    if (!(note instanceof TFile)) notFound('project', projectId)
+    await this.plugin.app.fileManager.processFrontMatter(note, (frontmatter: Record<string, unknown>) => {
+      if (tags.length) frontmatter['tags'] = tags
+      else Reflect.deleteProperty(frontmatter, 'tags')
+    })
+    const project = await this.load(ref)
+    const summary = { ...this.summary(ref), tags }
+    return toProjectResource(project, this.plugin.store.configFor(project), summary, this.presets())
+  }
+
+  /** A meeting note of the project, by the path list_meetings gave. */
+  private meetingFile(ref: ProjectRef, path: string): TFile {
+    return this.plugin.projectFiles.meetings(ref.path).find((file) => file.path === path) ?? notFound('meeting', path)
+  }
+
+  async updateMeeting(projectId: string, input: unknown): Promise<MeetingResource> {
+    const ref = this.refById(projectId)
+    const update = parseMeetingUpdate(input)
+    const file = this.meetingFile(ref, update.path)
+    const { content } = update
+    const text =
+      content === undefined
+        ? await this.plugin.app.vault.read(file)
+        : await this.plugin.app.vault.process(file, (current) => withNoteBody(current, content))
+    if (update.title !== undefined || update.date !== undefined) {
+      const name = sanitizeFileName(
+        meetingFileName(update.date ?? meetingDate(file.basename), update.title ?? meetingTitle(file.basename))
+      )
+      const target = `${this.plugin.projectFiles.meetingsFolder(ref.path)}/${name}.md`
+      if (target !== file.path) {
+        if (this.plugin.app.vault.getAbstractFileByPath(target)) {
+          throw new ApiRequestError('invalid', `a meeting note named "${name}" already exists`)
+        }
+        await this.plugin.app.fileManager.renameFile(file, target)
+      }
+    }
+    return this.meeting(file, text)
+  }
+
+  async deleteMeeting(projectId: string, input: unknown): Promise<void> {
+    const ref = this.refById(projectId)
+    await this.plugin.app.fileManager.trashFile(this.meetingFile(ref, parseMeetingRef(input)))
+  }
+
+  /**
+   * Rewrites a project table note through `edit`, after checking that the row the client
+   * read is still at its index. Missing rows are `not_found`, moved ones `conflict`.
+   */
+  private async editRow(
+    file: TFile | null,
+    what: string,
+    ref: RowRef,
+    check: (text: string) => void,
+    edit: (text: string) => string | null
+  ): Promise<string> {
+    if (!file) notFound(what, String(ref.index))
+    return this.plugin.app.vault.process(file, (current) => {
+      check(current)
+      return edit(current) ?? notFound(what, String(ref.index))
+    })
+  }
+
+  private checkParticipant(ref: RowRef): (text: string) => void {
+    return (text) => {
+      const person = parseParticipants(text)[ref.index] ?? notFound('participant', String(ref.index))
+      const expected = ref.expectedName?.trim().toLowerCase()
+      if (expected !== undefined && person.name.toLowerCase() !== expected) {
+        throw new ApiRequestError('conflict', `participant ${ref.index} is now "${person.name}"; read the list again`)
+      }
+    }
+  }
+
+  async updateParticipant(projectId: string, input: unknown): Promise<Participant[]> {
+    const project = this.refById(projectId)
+    const { patch, ...ref } = parseParticipantUpdate(input)
+    const file = this.plugin.projectFiles.file(project.path, 'participants')
+    const text = await this.editRow(file, 'participant', ref, this.checkParticipant(ref), (current) =>
+      updateParticipant(current, ref.index, patch)
+    )
+    return parseParticipants(text)
+  }
+
+  async removeParticipant(projectId: string, input: unknown): Promise<Participant[]> {
+    const project = this.refById(projectId)
+    const ref = parseParticipantRef(input)
+    const file = this.plugin.projectFiles.file(project.path, 'participants')
+    const text = await this.editRow(file, 'participant', ref, this.checkParticipant(ref), (current) =>
+      removeParticipant(current, ref.index)
+    )
+    return parseParticipants(text)
+  }
+
+  private checkEntry(ref: RowRef): (text: string) => void {
+    return (text) => {
+      const entry: TimesheetEntry = parseTimesheet(text)[ref.index] ?? notFound('timesheet entry', String(ref.index))
+      const moved =
+        (ref.expectedDate !== undefined && entry.date !== ref.expectedDate) ||
+        (ref.expectedHours !== undefined && Math.abs(entry.hours - ref.expectedHours) > 1e-6)
+      if (moved) {
+        throw new ApiRequestError(
+          'conflict',
+          `timesheet entry ${ref.index} is now ${entry.date} ${entry.hours} h; read the timesheet again`
+        )
+      }
+    }
+  }
+
+  async updateTimeEntry(projectId: string, input: unknown): Promise<TimesheetResource> {
+    const project = this.refById(projectId)
+    const { patch, ...ref } = parseTimeEntryUpdate(input)
+    const file = this.plugin.projectFiles.file(project.path, 'timesheet')
+    const text = await this.editRow(file, 'timesheet entry', ref, this.checkEntry(ref), (current) =>
+      updateTimesheetEntry(current, ref.index, patch, locale())
+    )
+    return this.timesheet(project, text)
+  }
+
+  async removeTimeEntry(projectId: string, input: unknown): Promise<TimesheetResource> {
+    const project = this.refById(projectId)
+    const ref = parseTimeEntryRef(input)
+    const file = this.plugin.projectFiles.file(project.path, 'timesheet')
+    const text = await this.editRow(file, 'timesheet entry', ref, this.checkEntry(ref), (current) =>
+      removeTimesheetEntry(current, ref.index)
+    )
+    return this.timesheet(project, text)
+  }
+
+  async getPresets(): Promise<PresetsResource> {
+    const { projectStatuses, projectTypes, projectDataFields } = this.plugin.settings
+    return {
+      projectStatuses: projectStatuses.map((status) => ({ ...status })),
+      projectTypes: projectTypes.map((type) => ({ ...type })),
+      projectDataFields: projectDataFields.map((field) => ({ ...field }))
+    }
+  }
+
+  async updatePresets(input: unknown): Promise<PresetsResource> {
+    const presets = parsePresets(input)
+    Object.assign(this.plugin.settings, presets)
+    await this.plugin.saveSettings()
+    this.plugin.refreshViews()
+    return this.getPresets()
+  }
+
+  async syncProjectSheets(input: unknown): Promise<SheetSyncResult> {
+    const projectId = parseSheetSync(input)
+    if (!this.plugin.settings.projectDataSheetSync) {
+      throw new ApiRequestError('invalid', 'the spreadsheet sync is turned off in the settings')
+    }
+    const refs = projectId
+      ? [this.refById(projectId)]
+      : this.plugin.index.projectRefs(true).filter((ref) => this.plugin.projectFiles.file(ref.path, 'data'))
+    const problems: SheetSyncResult['problems'] = []
+    for (const ref of refs) {
+      await this.plugin.projectDataSync.sync(ref.path)
+      const status = this.plugin.projectDataSync.status(ref.path)
+      if (status && !status.ok) problems.push({ projectId: ref.id, title: ref.title, message: status.message })
+    }
+    return { checked: refs.length, problems }
+  }
+
+  setUpProjectData(): Promise<ProjectDataSetUp> {
+    return this.plugin.projectDataSync.setUpAllProjects()
+  }
+
   private timesheet(ref: ProjectRef, text: string): TimesheetResource {
     const entries = parseTimesheet(text)
     return { projectId: ref.id, entries, ...summarizeTimesheet(entries) }
@@ -403,7 +625,8 @@ export class LocalApi implements DomainApi {
       archived: this.plugin.index.isArchived(ref.path),
       taskCount: counts.total,
       doneCount: counts.done,
-      ...projectLabelIds(this.plugin, ref)
+      ...projectLabelIds(this.plugin, ref),
+      tags: [...ref.tags]
     }
   }
 

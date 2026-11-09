@@ -65,6 +65,11 @@ export class ChangeLog {
     this.push('project', 'delete', prev.projectId, prev.projectId)
   }
 
+  /** A change the log can't see by comparing projects, such as a project file written. */
+  record(kind: Change['kind'], op: Change['op'], id: string, projectId: string): void {
+    this.push(kind, op, id, projectId)
+  }
+
   trackedPaths(): string[] {
     return [...this.snapshots.keys()]
   }

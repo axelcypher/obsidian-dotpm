@@ -6,6 +6,7 @@ import { makeFakeApp } from '#test/fakeVault'
 import type PMPlugin from '#main'
 import { ProjectStore } from '#store/ProjectStore'
 import { VaultIndex } from '#store/VaultIndex'
+import { ProjectFiles } from '../components/ProjectFiles'
 import { LocalApi } from './LocalApi'
 
 const SETTINGS: PMSettings = { ...DEFAULT_SETTINGS, autoSchedule: false }
@@ -21,6 +22,7 @@ function newApi(): { api: LocalApi; store: ProjectStore; index: VaultIndex; refr
     index,
     store,
     settings: SETTINGS,
+    projectFiles: new ProjectFiles(typed, () => SETTINGS),
     refreshViews: () => {
       refreshed++
     }

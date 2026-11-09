@@ -47,6 +47,10 @@ export class FakeVault {
     return handler
   }
 
+  offref(handler: unknown): void {
+    for (const set of this.handlers.values()) set.delete(handler as VaultHandler)
+  }
+
   private emit(name: string, file: TAbstractFile, oldPath?: string): void {
     for (const handler of this.handlers.get(name) ?? []) handler(file, oldPath)
   }
@@ -269,6 +273,10 @@ export class FakeMetadataCache {
     return handler
   }
 
+  offref(handler: unknown): void {
+    for (const set of this.handlers.values()) set.delete(handler as MetadataHandler)
+  }
+
   private emit(name: string, file: TFile, oldPath?: string): void {
     for (const handler of this.handlers.get(name) ?? []) handler(file, oldPath)
   }
@@ -305,7 +313,8 @@ export function makeFakeApp(opts: { liveMetadataCache?: boolean; caseInsensitive
           getFileCache: () => null,
           getFirstLinkpathDest: (linkpath: string) => firstLinkpathDest(vault, linkpath),
           fileToLinktext: (file: TFile) => linktextFor(vault, file),
-          on: () => undefined
+          on: () => undefined,
+          offref: () => undefined
         }
   }
   return { app, vault }
@@ -338,6 +347,7 @@ export interface FakeAppLike {
     getFirstLinkpathDest: (linkpath: string, sourcePath: string) => TFile | null
     fileToLinktext: (file: TFile, sourcePath: string) => string
     on: (name: string, handler: MetadataHandler) => unknown
+    offref: (ref: unknown) => void
   }
 }
 

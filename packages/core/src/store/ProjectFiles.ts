@@ -92,6 +92,44 @@ function columnIndexes<K extends string>(header: string[], names: Record<K, stri
 
 const cellAt = (row: string[], index: number): string => (index >= 0 ? (row[index] ?? '') : '')
 
+/** Where a table keeps each known column, and which of its rows count as entries. */
+interface TableRows<K extends string> {
+  columns: Record<K, number>
+  keep: (row: string[]) => boolean
+}
+
+/**
+ * The note with the `index`-th counted row of its first table changed by `values`, or
+ * removed for null. Cells of columns `values` leaves out keep their text and markup.
+ */
+function editTableRow<K extends string>(
+  markdown: string,
+  index: number,
+  rowsOf: (table: MarkdownTable) => TableRows<K>,
+  values: Partial<Record<K, string>> | null
+): string | null {
+  const text = markdown.replace(/\r\n/g, '\n')
+  const table = parseMarkdownTable(text)
+  if (!table || !Number.isInteger(index) || index < 0) return null
+  const { columns, keep } = rowsOf(table)
+  const counted = table.rows.flatMap((row, i) => (keep(row) ? [table.start + 2 + i] : []))
+  const line = counted[index]
+  if (line === undefined) return null
+  const lines = text.split('\n')
+  if (values === null) {
+    lines.splice(line, 1)
+    return lines.join('\n')
+  }
+  const cells = tableCells(lines[line])
+  while (cells.length < table.header.length) cells.push('')
+  for (const [key, value] of Object.entries(values) as [K, string | undefined][]) {
+    const column = columns[key]
+    if (value !== undefined && column >= 0) cells[column] = value
+  }
+  lines[line] = tableLine(cells)
+  return lines.join('\n')
+}
+
 // ---------------------------------------------------------------------------------------
 // Participants
 
@@ -121,21 +159,47 @@ function participantColumns(): Record<keyof Participant, string[]> {
   })
 }
 
+function participantColumnsOf(table: MarkdownTable): Record<keyof Participant, number> {
+  const columns = columnIndexes(table.header, participantColumns())
+  if (columns.name < 0) columns.name = 0
+  return columns
+}
+
+function participantOf(row: string[], columns: Record<keyof Participant, number>): Participant {
+  return {
+    name: plainCell(cellAt(row, columns.name)),
+    role: plainCell(cellAt(row, columns.role)),
+    company: plainCell(cellAt(row, columns.company)),
+    email: plainCell(cellAt(row, columns.email)),
+    phone: plainCell(cellAt(row, columns.phone))
+  }
+}
+
+/** Which rows of the participants table are people: those with anything in a known column. */
+function participantRows(table: MarkdownTable): TableRows<keyof Participant> {
+  const columns = participantColumnsOf(table)
+  return { columns, keep: (row) => Object.values(participantOf(row, columns)).some(Boolean) }
+}
+
 /** The participants in the note's first table, matched to its columns by their headings. */
 export function parseParticipants(markdown: string): Participant[] {
   const table = parseMarkdownTable(markdown)
   if (!table) return []
-  const columns = columnIndexes(table.header, participantColumns())
-  if (columns.name < 0) columns.name = 0
-  return table.rows
-    .map((row) => ({
-      name: plainCell(cellAt(row, columns.name)),
-      role: plainCell(cellAt(row, columns.role)),
-      company: plainCell(cellAt(row, columns.company)),
-      email: plainCell(cellAt(row, columns.email)),
-      phone: plainCell(cellAt(row, columns.phone))
-    }))
-    .filter((participant) => Object.values(participant).some(Boolean))
+  const { columns, keep } = participantRows(table)
+  return table.rows.filter(keep).map((row) => participantOf(row, columns))
+}
+
+/**
+ * The note with the participant at `index`, as `parseParticipants` counts them, changed
+ * where `patch` says; other cells and columns stay as written. Null when there is no such row.
+ */
+export function updateParticipant(markdown: string, index: number, patch: Partial<Participant>): string | null {
+  return editTableRow(markdown, index, participantRows, patch)
+}
+
+/** The note without the participant at `index`; null when there is no such row. */
+export function removeParticipant(markdown: string, index: number): string | null {
+  return editTableRow(markdown, index, participantRows, null)
 }
 
 /** The participants whose name, role, company, email or phone holds every word of the query. */
@@ -216,27 +280,54 @@ function isoDate(text: string): string {
   return german ? `${german[3]}-${german[2].padStart(2, '0')}-${german[1].padStart(2, '0')}` : ''
 }
 
-/** The entries of the timesheet's first table. Rows without readable hours are left out. */
-export function parseTimesheet(markdown: string): TimesheetEntry[] {
-  const table = parseMarkdownTable(markdown)
-  if (!table) return []
+function timesheetColumnsOf(table: MarkdownTable): Record<keyof TimesheetEntry, number> {
   const columns = columnIndexes(table.header, timesheetColumns())
   // A table whose headings name none of the columns is read in the order the template writes them.
   if (Object.values(columns).every((index) => index < 0)) {
     Object.assign(columns, { date: 0, hours: 1, person: 2, activity: 3 })
   }
-  return table.rows.flatMap((row) => {
-    const hours = parseHours(plainCell(cellAt(row, columns.hours)))
-    if (hours === null) return []
-    return [
-      {
-        date: isoDate(cellAt(row, columns.date)),
-        hours,
-        person: plainCell(cellAt(row, columns.person)),
-        activity: plainCell(cellAt(row, columns.activity))
-      }
-    ]
+  return columns
+}
+
+/** Which rows of the timesheet are entries: those whose hours can be read. */
+function timesheetRows(table: MarkdownTable): TableRows<keyof TimesheetEntry> {
+  const columns = timesheetColumnsOf(table)
+  return { columns, keep: (row) => parseHours(plainCell(cellAt(row, columns.hours))) !== null }
+}
+
+/** The entries of the timesheet's first table. Rows without readable hours are left out. */
+export function parseTimesheet(markdown: string): TimesheetEntry[] {
+  const table = parseMarkdownTable(markdown)
+  if (!table) return []
+  const { columns, keep } = timesheetRows(table)
+  return table.rows.filter(keep).map((row) => ({
+    date: isoDate(cellAt(row, columns.date)),
+    hours: parseHours(plainCell(cellAt(row, columns.hours))) ?? 0,
+    person: plainCell(cellAt(row, columns.person)),
+    activity: plainCell(cellAt(row, columns.activity))
+  }))
+}
+
+/**
+ * The timesheet with the entry at `index`, as `parseTimesheet` counts them, changed where
+ * `patch` says; other cells and columns stay as written. Null when there is no such entry.
+ */
+export function updateTimesheetEntry(
+  markdown: string,
+  index: number,
+  patch: Partial<TimesheetEntry>,
+  localeTag: string
+): string | null {
+  const { hours, ...rest } = patch
+  return editTableRow(markdown, index, timesheetRows, {
+    ...rest,
+    ...(hours === undefined ? {} : { hours: formatHours(hours, localeTag) })
   })
+}
+
+/** The timesheet without the entry at `index`; null when there is no such entry. */
+export function removeTimesheetEntry(markdown: string, index: number): string | null {
+  return editTableRow(markdown, index, timesheetRows, null)
 }
 
 function timesheetHeader(): string[] {
@@ -332,6 +423,12 @@ const FRONTMATTER = /^---\r?\n[\s\S]*?\r?\n---(\r?\n|$)/
 /** A note's Markdown without its properties, trimmed. */
 export function noteBody(markdown: string): string {
   return markdown.replace(FRONTMATTER, '').trim()
+}
+
+/** The note with `body` in place of its Markdown, its properties kept. */
+export function withNoteBody(markdown: string, body: string): string {
+  const head = FRONTMATTER.exec(markdown)?.[0] ?? ''
+  return `${head}${body}`
 }
 
 const MEETING_DATE = /^(\d{4}-\d{2}-\d{2})\b\s*/

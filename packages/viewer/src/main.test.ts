@@ -42,6 +42,7 @@ function snapshot(): Snapshot {
         doneCount: 1,
         status: null,
         types: [],
+        tags: [],
         description: '',
         teamMembers: [],
         customFields: [],

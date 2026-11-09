@@ -12,6 +12,15 @@ import { ApiRequestError, type DomainApi } from './contract'
 import {
   CREATE_FIELDS,
   MEETING_FIELDS,
+  MEETING_REF_FIELDS,
+  MEETING_UPDATE_FIELDS,
+  PARTICIPANT_REF_FIELDS,
+  PARTICIPANT_UPDATE_FIELDS,
+  PRESETS_FIELDS,
+  PROJECT_TAGS_FIELDS,
+  SHEET_SYNC_FIELDS,
+  TIME_ENTRY_REF_FIELDS,
+  TIME_ENTRY_UPDATE_FIELDS,
   MOVE_FIELDS,
   PARTICIPANT_FIELDS,
   parseTaskSearch,
@@ -243,6 +252,83 @@ function registerTools(server: McpServer, api: DomainApi): void {
     description: 'Book hours on a project, dated today unless date is given. Returns the whole timesheet.',
     inputSchema: v.object({ projectId, ...TIME_ENTRY_FIELDS }),
     run: ({ projectId: project, ...entry }) => api.logTime(project, entry)
+  })
+
+  tool(server, 'set_project_tags', {
+    description: "Replace a project note's tags (without #); [] clears them. list_projects shows each project's tags.",
+    inputSchema: v.object({ projectId, ...PROJECT_TAGS_FIELDS }),
+    run: ({ projectId: project, ...tags }) => api.setProjectTags(project, tags)
+  })
+
+  tool(server, 'update_meeting', {
+    description:
+      'Change a meeting note by its path from list_meetings: content replaces the minutes, title and date rename the note.',
+    inputSchema: v.object({ projectId, ...MEETING_UPDATE_FIELDS }),
+    run: ({ projectId: project, ...update }) => api.updateMeeting(project, update)
+  })
+
+  tool(server, 'delete_meeting', {
+    description: 'Move a meeting note, by its path from list_meetings, to the trash.',
+    inputSchema: v.object({ projectId, ...MEETING_REF_FIELDS }),
+    run: async ({ projectId: project, ...ref }) => {
+      await api.deleteMeeting(project, ref)
+      return { deleted: true }
+    }
+  })
+
+  tool(server, 'update_participant', {
+    description:
+      'Change the participant at an index of list_participants; only the fields passed change. Pass expectedName to refuse the change when the list moved.',
+    inputSchema: v.object({ projectId, ...PARTICIPANT_UPDATE_FIELDS }),
+    run: ({ projectId: project, ...update }) => api.updateParticipant(project, update)
+  })
+
+  tool(server, 'remove_participant', {
+    description:
+      'Remove the participant at an index of list_participants. Pass expectedName to guard it. Returns the rest.',
+    inputSchema: v.object({ projectId, ...PARTICIPANT_REF_FIELDS }),
+    run: ({ projectId: project, ...ref }) => api.removeParticipant(project, ref)
+  })
+
+  tool(server, 'update_time_entry', {
+    description:
+      'Correct the timesheet entry at an index of get_timesheet entries; only the fields passed change. Pass expectedDate and expectedHours to refuse the change when the sheet moved.',
+    inputSchema: v.object({ projectId, ...TIME_ENTRY_UPDATE_FIELDS }),
+    run: ({ projectId: project, ...update }) => api.updateTimeEntry(project, update)
+  })
+
+  tool(server, 'delete_time_entry', {
+    description: 'Delete the timesheet entry at an index of get_timesheet entries, guarded like update_time_entry.',
+    inputSchema: v.object({ projectId, ...TIME_ENTRY_REF_FIELDS }),
+    run: ({ projectId: project, ...ref }) => api.removeTimeEntry(project, ref)
+  })
+
+  tool(server, 'get_presets', {
+    description:
+      'The vault-wide lists projects pick from: status presets (in list order), type presets and the project data fields.',
+    inputSchema: v.object({}),
+    run: () => api.getPresets()
+  })
+
+  tool(server, 'update_presets', {
+    description:
+      'Replace any of the lists get_presets returns. Pass a whole list: entries left out are removed. Ids and keys are derived from labels when left out. Changing an id leaves notes holding the old one unmatched.',
+    inputSchema: v.object(PRESETS_FIELDS),
+    run: (args) => api.updatePresets(args)
+  })
+
+  tool(server, 'sync_project_sheets', {
+    description:
+      "Sync project data notes with their spreadsheets now, for one project or all. Reports what couldn't be synced, such as a spreadsheet open in Excel.",
+    inputSchema: v.object(SHEET_SYNC_FIELDS),
+    run: (args) => api.syncProjectSheets(args)
+  })
+
+  tool(server, 'set_up_project_data', {
+    description:
+      'Give every project a project data note, take project folders from "Projektordner:" lines of descriptions, and sync the spreadsheets.',
+    inputSchema: v.object({}),
+    run: () => api.setUpProjectData()
   })
 
   tool(server, 'list_changes', {

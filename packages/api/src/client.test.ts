@@ -39,6 +39,23 @@ describe('HttpApi', () => {
     await expect(api.setProjectStatus('p1', { status: 'someday' })).rejects.toMatchObject({ code: 'invalid' })
   })
 
+  it('edits project files and presets over HTTP', async () => {
+    await api.addParticipant('p1', { name: 'Anna' })
+    expect((await api.updateParticipant('p1', { index: 0, role: 'Statik' }))[0].role).toBe('Statik')
+    expect(await api.removeParticipant('p1', { index: 0 })).toEqual([])
+    const meeting = await api.createMeeting('p1', { title: 'Abgleich' })
+    expect((await api.updateMeeting('p1', { path: meeting.path, content: 'x' })).content).toBe('x')
+    await api.deleteMeeting('p1', { path: meeting.path })
+    await api.logTime('p1', { hours: 1 })
+    expect((await api.updateTimeEntry('p1', { index: 0, hours: 4 })).total).toBe(4)
+    expect((await api.removeTimeEntry('p1', { index: 0 })).total).toBe(0)
+    expect((await api.setProjectTags('p1', { tags: ['x'] })).tags).toEqual(['x'])
+    expect((await api.updatePresets({ projectDataFields: [] })).projectDataFields).toEqual([])
+    expect((await api.getPresets()).projectStatuses.length).toBeGreaterThan(0)
+    expect(await api.syncProjectSheets(undefined)).toEqual({ checked: 1, problems: [] })
+    expect(await api.setUpProjectData()).toEqual({ created: 1, folders: 0 })
+  })
+
   it('reads health, projects and tasks', async () => {
     expect(await api.health()).toEqual({ ok: true, name: 'dotpm', version: '9.9.9' })
     expect((await api.listProjects()).map((p) => p.id)).toEqual(['p1'])

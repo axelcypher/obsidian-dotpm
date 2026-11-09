@@ -171,6 +171,43 @@ export function createRouter(host: HttpHost): (request: Request) => Response | P
     c.json(await c.var.api.logTime(c.req.param('id'), await body(c)), 201)
   )
 
+  app.put('/v1/projects/:id/tags', async (c) =>
+    c.json(await c.var.api.setProjectTags(c.req.param('id'), await body(c)))
+  )
+
+  app.patch('/v1/projects/:id/meetings', async (c) =>
+    c.json(await c.var.api.updateMeeting(c.req.param('id'), await body(c)))
+  )
+
+  app.delete('/v1/projects/:id/meetings', async (c) => {
+    await c.var.api.deleteMeeting(c.req.param('id'), await body(c))
+    return c.body(null, 204)
+  })
+
+  app.patch('/v1/projects/:id/participants', async (c) =>
+    c.json(await c.var.api.updateParticipant(c.req.param('id'), await body(c)))
+  )
+
+  app.delete('/v1/projects/:id/participants', async (c) =>
+    c.json(await c.var.api.removeParticipant(c.req.param('id'), await body(c)))
+  )
+
+  app.patch('/v1/projects/:id/timesheet', async (c) =>
+    c.json(await c.var.api.updateTimeEntry(c.req.param('id'), await body(c)))
+  )
+
+  app.delete('/v1/projects/:id/timesheet', async (c) =>
+    c.json(await c.var.api.removeTimeEntry(c.req.param('id'), await body(c)))
+  )
+
+  app.get('/v1/presets', async (c) => c.json(await c.var.api.getPresets()))
+
+  app.patch('/v1/presets', async (c) => c.json(await c.var.api.updatePresets(await body(c))))
+
+  app.post('/v1/sheets/sync', async (c) => c.json(await c.var.api.syncProjectSheets(await body(c))))
+
+  app.post('/v1/sheets/setup', async (c) => c.json(await c.var.api.setUpProjectData()))
+
   app.get('/v1/search', async (c) => c.json(await c.var.api.searchTasks(parseTaskSearch(search(c)))))
 
   app.get('/v1/changes', async (c) => {

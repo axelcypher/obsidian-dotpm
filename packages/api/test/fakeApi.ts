@@ -9,7 +9,9 @@ import {
   summarizeTimesheet,
   type Participant,
   type Project,
+  type ProjectDataField,
   type ProjectDataValue,
+  type ProjectLabelConfig,
   type TimesheetEntry
 } from '@dotpm/core'
 import type {
@@ -17,7 +19,10 @@ import type {
   ChangePage,
   DomainApi,
   MeetingResource,
+  PresetsResource,
   ProjectDataResource,
+  ProjectDataSetUp,
+  SheetSyncResult,
   ProjectResource,
   ProjectSummary,
   TaskResource,
@@ -26,6 +31,15 @@ import type {
 } from '../src/contract'
 import { ApiRequestError } from '../src/contract'
 import {
+  parseMeetingRef,
+  parseMeetingUpdate,
+  parseParticipantRef,
+  parseParticipantUpdate,
+  parsePresets,
+  parseProjectTags,
+  parseSheetSync,
+  parseTimeEntryRef,
+  parseTimeEntryUpdate,
   parseMeetingCreate,
   parseParticipant,
   parseProjectDataWrite,
@@ -62,6 +76,10 @@ export class FakeApi implements DomainApi {
   changeLog: Change[] = []
   status: string | null = null
   types: string[] = []
+  tags: string[] = []
+  projectStatuses: ProjectLabelConfig[] = DEFAULT_PROJECT_STATUSES
+  projectTypes: ProjectLabelConfig[] = DEFAULT_PROJECT_TYPES
+  projectDataFields: ProjectDataField[] = []
   data: Record<string, ProjectDataValue> = {}
   participants: Participant[] = []
   meetings: MeetingResource[] = []
@@ -87,7 +105,8 @@ export class FakeApi implements DomainApi {
       taskCount: this.project.tasks.length,
       doneCount: this.project.tasks.filter((t) => t.status === 'done').length,
       status: this.status,
-      types: [...this.types]
+      types: [...this.types],
+      tags: [...this.tags]
     }
   }
 
@@ -157,6 +176,7 @@ export class FakeApi implements DomainApi {
       doneCount: 0,
       status: null,
       types: [],
+      tags: [],
       description: project.description,
       teamMembers: project.teamMembers,
       customFields: [],
@@ -253,7 +273,8 @@ export class FakeApi implements DomainApi {
     return {
       projectId: this.project.id,
       folder: '',
-      rows: Object.entries(this.data).map(([key, value]) => ({ group: '', label: key, key, value }))
+      rows: Object.entries(this.data).map(([key, value]) => ({ group: '', label: key, key, value })),
+      sheet: null
     }
   }
 
@@ -327,5 +348,121 @@ export class FakeApi implements DomainApi {
       activity: entry.activity ?? ''
     })
     return this.timesheetResource()
+  }
+
+  async setProjectTags(projectId: string, input: unknown): Promise<ProjectResource> {
+    this.checkProject(projectId)
+    this.tags = parseProjectTags(input)
+    this.calls.push(`setProjectTags ${projectId} ${this.tags.join(',')}`)
+    return this.resource()
+  }
+
+  private meetingAt(path: string): number {
+    const index = this.meetings.findIndex((meeting) => meeting.path === path)
+    if (index < 0) throw new ApiRequestError('not_found', `meeting ${path} not found`)
+    return index
+  }
+
+  async updateMeeting(projectId: string, input: unknown): Promise<MeetingResource> {
+    this.checkProject(projectId)
+    const update = parseMeetingUpdate(input)
+    this.calls.push(`updateMeeting ${projectId} ${update.path}`)
+    const meeting = this.meetings[this.meetingAt(update.path)]
+    Object.assign(meeting, {
+      ...(update.title === undefined ? {} : { title: update.title }),
+      ...(update.date === undefined ? {} : { date: update.date }),
+      ...(update.content === undefined ? {} : { content: update.content })
+    })
+    return meeting
+  }
+
+  async deleteMeeting(projectId: string, input: unknown): Promise<void> {
+    this.checkProject(projectId)
+    const path = parseMeetingRef(input)
+    this.calls.push(`deleteMeeting ${projectId} ${path}`)
+    this.meetings.splice(this.meetingAt(path), 1)
+  }
+
+  private participantAt(index: number, expectedName?: string): Participant {
+    const person = this.participants[index]
+    if (!person) throw new ApiRequestError('not_found', `no participant at ${index}`)
+    if (expectedName !== undefined && person.name !== expectedName) {
+      throw new ApiRequestError('conflict', `participant ${index} is ${person.name}`)
+    }
+    return person
+  }
+
+  async updateParticipant(projectId: string, input: unknown): Promise<Participant[]> {
+    this.checkProject(projectId)
+    const { index, expectedName, patch } = parseParticipantUpdate(input)
+    this.calls.push(`updateParticipant ${projectId} ${index}`)
+    Object.assign(this.participantAt(index, expectedName), patch)
+    return [...this.participants]
+  }
+
+  async removeParticipant(projectId: string, input: unknown): Promise<Participant[]> {
+    this.checkProject(projectId)
+    const { index, expectedName } = parseParticipantRef(input)
+    this.calls.push(`removeParticipant ${projectId} ${index}`)
+    this.participantAt(index, expectedName)
+    this.participants.splice(index, 1)
+    return [...this.participants]
+  }
+
+  private entryAt(index: number, expectedDate?: string, expectedHours?: number): TimesheetEntry {
+    const entry = this.timesheet[index]
+    if (!entry) throw new ApiRequestError('not_found', `no timesheet entry at ${index}`)
+    if (
+      (expectedDate !== undefined && entry.date !== expectedDate) ||
+      (expectedHours !== undefined && entry.hours !== expectedHours)
+    ) {
+      throw new ApiRequestError('conflict', `timesheet entry ${index} changed`)
+    }
+    return entry
+  }
+
+  async updateTimeEntry(projectId: string, input: unknown): Promise<TimesheetResource> {
+    this.checkProject(projectId)
+    const { index, expectedDate, expectedHours, patch } = parseTimeEntryUpdate(input)
+    this.calls.push(`updateTimeEntry ${projectId} ${index}`)
+    Object.assign(this.entryAt(index, expectedDate, expectedHours), patch)
+    return this.timesheetResource()
+  }
+
+  async removeTimeEntry(projectId: string, input: unknown): Promise<TimesheetResource> {
+    this.checkProject(projectId)
+    const { index, expectedDate, expectedHours } = parseTimeEntryRef(input)
+    this.calls.push(`removeTimeEntry ${projectId} ${index}`)
+    this.entryAt(index, expectedDate, expectedHours)
+    this.timesheet.splice(index, 1)
+    return this.timesheetResource()
+  }
+
+  async getPresets(): Promise<PresetsResource> {
+    this.calls.push('getPresets')
+    return {
+      projectStatuses: this.projectStatuses,
+      projectTypes: this.projectTypes,
+      projectDataFields: this.projectDataFields
+    }
+  }
+
+  async updatePresets(input: unknown): Promise<PresetsResource> {
+    const presets = parsePresets(input)
+    this.calls.push(`updatePresets ${Object.keys(presets).join(',')}`)
+    Object.assign(this, presets)
+    return this.getPresets()
+  }
+
+  async syncProjectSheets(input: unknown): Promise<SheetSyncResult> {
+    const projectId = parseSheetSync(input)
+    this.calls.push(`syncProjectSheets ${projectId ?? 'all'}`)
+    if (projectId) this.checkProject(projectId)
+    return { checked: 1, problems: [] }
+  }
+
+  async setUpProjectData(): Promise<ProjectDataSetUp> {
+    this.calls.push('setUpProjectData')
+    return { created: 1, folders: 0 }
   }
 }

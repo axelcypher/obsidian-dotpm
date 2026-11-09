@@ -80,13 +80,17 @@ export class ProjectFiles {
     )
   }
 
+  /** Which of the project's files `path` is, or null for none of them. */
+  kindOf(projectPath: string, path: string): ProjectFileKind | 'meeting' | null {
+    const kinds: ProjectFileKind[] = ['participants', 'data', 'timesheet']
+    const kind = kinds.find((candidate) => this.path(projectPath, candidate) === path)
+    if (kind) return kind
+    return path.startsWith(`${this.meetingsFolder(projectPath)}/`) && path.endsWith('.md') ? 'meeting' : null
+  }
+
   /** Whether a change at `path` touches one of the project's files. */
   concerns(projectPath: string, path: string): boolean {
-    const kinds: ProjectFileKind[] = ['participants', 'data', 'timesheet']
-    return (
-      kinds.some((kind) => this.path(projectPath, kind) === path) ||
-      path.startsWith(`${this.meetingsFolder(projectPath)}/`)
-    )
+    return this.kindOf(projectPath, path) !== null
   }
 
   /** The note, created from its template when the project has none yet. */

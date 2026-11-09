@@ -215,6 +215,41 @@ describe('createRouter', () => {
     expect((await json('GET', '/v1/projects/nope/timesheet')).status).toBe(404)
   })
 
+  it('edits project files and presets through PATCH and DELETE with JSON bodies', async () => {
+    await json('POST', '/v1/projects/p1/participants', { body: { name: 'Anna' } })
+    expect((await json('PATCH', '/v1/projects/p1/participants', { body: { index: 0, phone: '0123' } })).body).toEqual([
+      { name: 'Anna', role: '', company: '', email: '', phone: '0123' }
+    ])
+    expect((await json('DELETE', '/v1/projects/p1/participants', { body: { index: 3 } })).status).toBe(404)
+    expect((await json('DELETE', '/v1/projects/p1/participants', { body: { index: 0 } })).body).toEqual([])
+    const meeting = (await json('POST', '/v1/projects/p1/meetings', { body: { title: 'Abgleich' } })).body as {
+      path: string
+    }
+    expect(
+      (await json('PATCH', '/v1/projects/p1/meetings', { body: { path: meeting.path, title: 'Statik' } })).body
+    ).toMatchObject({
+      title: 'Statik'
+    })
+    expect((await json('DELETE', '/v1/projects/p1/meetings', { body: { path: meeting.path } })).status).toBe(204)
+    await json('POST', '/v1/projects/p1/timesheet', { body: { hours: 1 } })
+    expect(
+      (await json('PATCH', '/v1/projects/p1/timesheet', { body: { index: 0, expectedHours: 3, hours: 2 } })).status
+    ).toBe(412)
+    expect((await json('DELETE', '/v1/projects/p1/timesheet', { body: { index: 0 } })).body).toMatchObject({ total: 0 })
+    expect((await json('PUT', '/v1/projects/p1/tags', { body: { tags: ['a'] } })).body).toMatchObject({ tags: ['a'] })
+    expect((await json('GET', '/v1/presets')).body).toMatchObject({ projectStatuses: expect.any(Array) })
+    expect(
+      (await json('PATCH', '/v1/presets', { body: { projectStatuses: [{ label: 'Läuft' }] } })).body
+    ).toMatchObject({
+      projectStatuses: [{ id: 'lauft', label: 'Läuft' }]
+    })
+    expect((await json('POST', '/v1/sheets/sync', { body: { projectId: 'p1' } })).body).toEqual({
+      checked: 1,
+      problems: []
+    })
+    expect((await json('POST', '/v1/sheets/setup')).body).toEqual({ created: 1, folders: 0 })
+  })
+
   it('needs the token for MCP too', async () => {
     const res = await route(
       new Request('http://127.0.0.1/mcp', { method: 'POST', body: JSON.stringify({ jsonrpc: '2.0', id: 1 }) })

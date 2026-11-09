@@ -19,10 +19,14 @@ import {
   projectDataGroups,
   projectDataKeyFor,
   projectDataTemplate,
+  removeParticipant,
+  removeTimesheetEntry,
   sortMeetings,
   summarizeTimesheet,
   tableCells,
-  timesheetTemplate
+  timesheetTemplate,
+  updateParticipant,
+  updateTimesheetEntry
 } from './ProjectFiles'
 
 afterEach(() => setLocale('en'))
@@ -94,6 +98,22 @@ describe('participants', () => {
     expect(parseParticipants(appendParticipant('', person))).toEqual([person])
   })
 
+  it('changes and removes a participant by its place in the list, leaving other cells as written', () => {
+    const text = [
+      '| Name | Rolle | Notiz | E-Mail |',
+      '| --- | --- | --- | --- |',
+      '| Anna | Statik | **wichtig** | [a@x.de](mailto:a@x.de) |',
+      '|  |  |  |  |',
+      '| Bernd | Bauleitung | x \\| y |  |'
+    ].join('\n')
+    const changed = updateParticipant(text, 1, { role: 'Bauüberwachung', email: 'b@x.de' })
+    expect(changed?.split('\n')[4]).toBe('| Bernd | Bauüberwachung | x \\| y | b@x.de |')
+    expect(changed?.split('\n')[2]).toBe('| Anna | Statik | **wichtig** | [a@x.de](mailto:a@x.de) |')
+    expect(parseParticipants(removeParticipant(text, 0) ?? '').map((person) => person.name)).toEqual(['Bernd'])
+    expect(updateParticipant(text, 2, { name: 'X' })).toBeNull()
+    expect(removeParticipant('kein Tisch', 0)).toBeNull()
+  })
+
   it('takes the first column as the name when no heading says so', () => {
     expect(parseParticipants('| Wer | Was |\n| --- | --- |\n| Anna | Statik |')[0].name).toBe('Anna')
   })
@@ -153,6 +173,26 @@ describe('timesheet', () => {
     const withEmptyRow = `${timesheetTemplate()}|  |  |  |  |\n`
     expect(parseTimesheet(appendTimesheetEntry(withEmptyRow, entry, 'de'))).toEqual([entry])
     expect(appendTimesheetEntry(withEmptyRow, entry, 'de')).not.toContain('|  |  |  |  |')
+  })
+
+  it('corrects and removes an entry by its place among the readable ones', () => {
+    const text = [
+      '| Datum | Stunden | Bearbeiter | Tätigkeit |',
+      '| --- | ---: | --- | --- |',
+      '| 2026-11-09 | 2,5 | Tobias | Entwurf |',
+      '| Notiz | ? |  | keine Stunden |',
+      '| 2026-11-10 | 1 | Bastian | Statik |'
+    ].join('\n')
+    const corrected = updateTimesheetEntry(text, 1, { hours: 1.75, activity: 'Abstimmung Statik' }, 'de')
+    expect(parseTimesheet(corrected ?? '')[1]).toEqual({
+      date: '2026-11-10',
+      hours: 1.75,
+      person: 'Bastian',
+      activity: 'Abstimmung Statik'
+    })
+    expect(corrected).toContain('| Notiz | ? |  | keine Stunden |')
+    expect(parseTimesheet(removeTimesheetEntry(text, 0) ?? '').map((entry) => entry.person)).toEqual(['Bastian'])
+    expect(removeTimesheetEntry(text, 2)).toBeNull()
   })
 
   it('sums the hours, per person with the most first', () => {

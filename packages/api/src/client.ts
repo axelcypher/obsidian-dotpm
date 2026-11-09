@@ -6,7 +6,10 @@ import {
   type ChangePage,
   type DomainApi,
   type MeetingResource,
+  type PresetsResource,
   type ProjectDataResource,
+  type ProjectDataSetUp,
+  type SheetSyncResult,
   type ProjectResource,
   type ProjectSummary,
   type TaskResource,
@@ -171,6 +174,50 @@ export class HttpApi implements DomainApi {
 
   logTime(projectId: string, input: unknown): Promise<TimesheetResource> {
     return this.request('POST', `/v1/projects/${id(projectId)}/timesheet`, input)
+  }
+
+  setProjectTags(projectId: string, input: unknown): Promise<ProjectResource> {
+    return this.request('PUT', `/v1/projects/${id(projectId)}/tags`, input)
+  }
+
+  updateMeeting(projectId: string, input: unknown): Promise<MeetingResource> {
+    return this.request('PATCH', `/v1/projects/${id(projectId)}/meetings`, input)
+  }
+
+  async deleteMeeting(projectId: string, input: unknown): Promise<void> {
+    await this.request('DELETE', `/v1/projects/${id(projectId)}/meetings`, input)
+  }
+
+  updateParticipant(projectId: string, input: unknown): Promise<Participant[]> {
+    return this.request('PATCH', `/v1/projects/${id(projectId)}/participants`, input)
+  }
+
+  removeParticipant(projectId: string, input: unknown): Promise<Participant[]> {
+    return this.request('DELETE', `/v1/projects/${id(projectId)}/participants`, input)
+  }
+
+  updateTimeEntry(projectId: string, input: unknown): Promise<TimesheetResource> {
+    return this.request('PATCH', `/v1/projects/${id(projectId)}/timesheet`, input)
+  }
+
+  removeTimeEntry(projectId: string, input: unknown): Promise<TimesheetResource> {
+    return this.request('DELETE', `/v1/projects/${id(projectId)}/timesheet`, input)
+  }
+
+  getPresets(): Promise<PresetsResource> {
+    return this.request('GET', '/v1/presets')
+  }
+
+  updatePresets(input: unknown): Promise<PresetsResource> {
+    return this.request('PATCH', '/v1/presets', input)
+  }
+
+  syncProjectSheets(input: unknown): Promise<SheetSyncResult> {
+    return this.request('POST', '/v1/sheets/sync', input ?? {})
+  }
+
+  setUpProjectData(): Promise<ProjectDataSetUp> {
+    return this.request('POST', '/v1/sheets/setup')
   }
 
   private async request<T>(

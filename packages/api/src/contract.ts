@@ -2,6 +2,7 @@ import type {
   CustomFieldDef,
   Participant,
   PriorityConfig,
+  ProjectDataField,
   ProjectDataRow,
   ProjectDataValue,
   ProjectLabelConfig,
@@ -28,6 +29,8 @@ export interface ProjectSummary {
   status: string | null
   /** The ids of the project's types, in the order its note lists them. */
   types: string[]
+  /** The project note's own tags, without `#`. */
+  tags: string[]
 }
 
 export interface ProjectResource extends ProjectSummary {
@@ -50,6 +53,28 @@ export interface ProjectDataResource {
   /** The project's folder outside the vault, empty without one. */
   folder: string
   rows: ProjectDataRow[]
+  /** The spreadsheet kept in step with the note, when the sync is on and the sheet can be reached. */
+  sheet: { path: string; ok: boolean; message: string } | null
+}
+
+/** What every project picks its status, types and data fields from. Order matters: it is the order shown. */
+export interface PresetsResource {
+  projectStatuses: ProjectLabelConfig[]
+  projectTypes: ProjectLabelConfig[]
+  projectDataFields: ProjectDataField[]
+}
+
+export interface SheetSyncResult {
+  /** Projects whose data note and spreadsheet were compared. */
+  checked: number
+  problems: { projectId: string; title: string; message: string }[]
+}
+
+export interface ProjectDataSetUp {
+  /** Data notes that didn't exist before. */
+  created: number
+  /** Project folders taken from a "Projektordner:" line of a description. */
+  folders: number
 }
 
 /** Values to write into the data note, by property; null empties one. */
@@ -168,7 +193,8 @@ export interface TaskSearch {
 export interface Change {
   seq: number
   at: string
-  kind: 'project' | 'task'
+  /** Project files carry the note's path as their id. */
+  kind: 'project' | 'task' | 'data' | 'participants' | 'meeting' | 'timesheet'
   op: 'upsert' | 'delete'
   id: string
   projectId: string
@@ -240,4 +266,23 @@ export interface DomainApi {
   getTimesheet(projectId: string): Promise<TimesheetResource>
   /** Books an entry into the timesheet and returns the whole sheet. */
   logTime(projectId: string, input: unknown): Promise<TimesheetResource>
+  /** Replaces the project note's tags. */
+  setProjectTags(projectId: string, input: unknown): Promise<ProjectResource>
+  /** Changes a meeting note, by its path: its minutes, and through a rename its title and date. */
+  updateMeeting(projectId: string, input: unknown): Promise<MeetingResource>
+  /** Moves a meeting note, by its path, to the trash. */
+  deleteMeeting(projectId: string, input: unknown): Promise<void>
+  /** Changes the participant at an index of `listParticipants`; a name to expect guards against a list that moved. */
+  updateParticipant(projectId: string, input: unknown): Promise<Participant[]>
+  removeParticipant(projectId: string, input: unknown): Promise<Participant[]>
+  /** Changes the entry at an index of the timesheet's entries; date and hours to expect guard against a sheet that moved. */
+  updateTimeEntry(projectId: string, input: unknown): Promise<TimesheetResource>
+  removeTimeEntry(projectId: string, input: unknown): Promise<TimesheetResource>
+  getPresets(): Promise<PresetsResource>
+  /** Replaces the lists given; lists left out stay. */
+  updatePresets(input: unknown): Promise<PresetsResource>
+  /** Syncs one project's spreadsheet, or every project's without a projectId. */
+  syncProjectSheets(input: unknown): Promise<SheetSyncResult>
+  /** Gives every project a data note, taking project folders from descriptions, then syncs the spreadsheets. */
+  setUpProjectData(): Promise<ProjectDataSetUp>
 }

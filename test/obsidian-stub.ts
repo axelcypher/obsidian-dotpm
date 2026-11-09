@@ -46,3 +46,13 @@ export class TFolder extends TAbstractFile {
   }
 }
 export const getLanguage = (): string => 'en'
+
+/** Tests run like the mobile app: no Node, no Electron, nothing outside the vault. */
+export const Platform = { isDesktopApp: false, isDesktop: false, isMobile: true, isPhone: false }
+
+/** Only the desktop app's adapter is one; tests never have it. */
+export class FileSystemAdapter {
+  getFullPath(path: string): string {
+    return path
+  }
+}

@@ -1,6 +1,7 @@
 import { type App, TFile, TFolder, normalizePath } from 'obsidian'
 import {
   type PMSettings,
+  type ProjectDataField,
   type TimesheetEntry,
   appendTimesheetEntry,
   defaultProjectFileNames,
@@ -46,6 +47,16 @@ export class ProjectFiles {
     return sanitizeFileName(raw?.trim() ?? '') || standard
   }
 
+  /** The spreadsheet's file name: the data note's name with `.xlsx`. */
+  sheetName(): string {
+    return `${this.name('data')}.xlsx`
+  }
+
+  /** Whether `path` is named like a data note, so most changes are told apart without a lookup. */
+  isDataNoteName(path: string): boolean {
+    return path === `${this.name('data')}.md` || path.endsWith(`/${this.name('data')}.md`)
+  }
+
   path(projectPath: string, kind: ProjectFileKind): string {
     return normalizePath(`${this.folder(projectPath)}/${this.name(kind)}.md`)
   }
@@ -87,9 +98,17 @@ export class ProjectFiles {
       kind === 'participants'
         ? participantsTemplate()
         : kind === 'data'
-          ? projectDataTemplate(this.getSettings().projectDataFields)
+          ? projectDataTemplate(this.dataTemplateFields())
           : timesheetTemplate()
     return this.app.vault.create(this.path(projectPath, kind), content)
+  }
+
+  /** The project folder first, then the data fields: what a new data note starts with, all empty. */
+  private dataTemplateFields(): ProjectDataField[] {
+    const { projectFolderProperty, projectDataFields } = this.getSettings()
+    const folder = projectFolderProperty.trim()
+    const rest = projectDataFields.filter((field) => field.key !== folder)
+    return folder ? [{ key: folder, label: folder, group: '' }, ...rest] : rest
   }
 
   /** A new note for today's meeting, numbered when one of the same name exists. */

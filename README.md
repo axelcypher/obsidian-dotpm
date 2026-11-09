@@ -20,6 +20,7 @@
 - **Tags column:** the project list can show the project note's own tags as a column.
 - **More columns:** status, type and tags are columns of the project list that the *Fields* menu shows, hides and reorders like the others.
 - **Project files:** each project keeps a folder of meeting notes, a participants note, a project data note and a timesheet in its own folder. The project overview shows the meetings as running text between description and milestones, and the data, participants and booked hours in its side column.
+- **Project data in Excel:** each project's data note is kept in step with a spreadsheet (`.xlsx`) both ways, in the project folder outside the vault (for example on a network drive) or beside the note.
 - **Quick time entries:** *Log time* (command, project overview, project context menu) books date, hours, person and activity into the project's timesheet in one dialog.
 - **Plugin identity:** own plugin ID `axlc-dotpm-revamped` and name *dotpm (Revamped)*.
 - **Release workflow:** streamlined build & release workflow shared with my other revamps (upstream CI, CodeQL, package publishing and issue templates were removed). Builds run with pnpm on Node 24, also on Windows.
@@ -75,6 +76,16 @@ In a German vault the defaults are `Abgleiche/`, `Projektbeteiligte`, `Projektda
 - **Participants:** a Markdown table, matched to its columns by the headings (*Name, Role, Company, Email, Phone*, also in German). The overview's side column only counts them; *Show all* (also a command and in the project context menu) opens a searchable window with everyone's role, company, email and phone.
 - **Project data:** the note's properties, flat and plain YAML, so other programs can read them, for example `grundstueck-flurstueck: 123/4`. *Settings → Project files → Project data fields* sets the fields with group, label and property name; the overview shows the filled ones grouped in that order as a compact two-column list, and properties no field names under *Other details*. Long values fold after three lines and open on a click. A new data note starts with every field as an empty property, to fill in from the properties panel.
 - **Timesheet:** a Markdown table with one row per entry. *Log time* adds a row (date, hours as `1,5`, `1.5` or `1:30`, who, what); the person is remembered for the next entry. The overview shows the total, the hours per person and the latest entries. Rows can also be edited by hand.
+
+### Project data in Excel
+
+Each project's data note has a spreadsheet twin, `Project data.xlsx` (in German `Projektdaten.xlsx`), kept in step both ways:
+
+- **Where:** in the project's folder outside the vault when the data note names one in `projektordner` (for example `Z:\Projekte\HVO Vogelsang`), otherwise beside the data note in the vault. Folders outside the vault need the desktop app.
+- **Sheets:** *Project data* lists every row as *Group | Label | Key | Value*, the project folder first and empty fields included; this is the sheet that is read back. *Mail merge* has the keys as headings over one row of values, for Word mail merges and other programs.
+- **Sync:** a change to the data note writes the spreadsheet a moment later. A change saved in Excel comes into the note when Obsidian starts, gets the focus back, every five minutes, and when the project's overview opens. When both changed since the last sync, the newer file wins. A spreadsheet that is open in Excel can't be written; the overview says so, and it syncs once Excel has closed it.
+- **Setting up:** *Create project data and spreadsheets for all projects* gives every project a data note and takes the project folder from a `Projektordner:` line of its description (a `file:///` link or a plain path). New projects get their data note when they are created.
+- The overview's *Project data* section shows the project folder (click to open it) and opens the spreadsheet with the sheet button. *Settings → Project files* turns the sync off and names the folder property.
 
 ## About dotpm
 

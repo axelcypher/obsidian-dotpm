@@ -291,6 +291,8 @@ export class ProjectCreateModal extends Modal {
       teamMembers: this.draft.teamMembers,
       parentPath: this.draft.parentPath || undefined
     })
+    // Every project gets its data note, and with it the spreadsheet other programs read.
+    await this.plugin.projectFiles.ensure(project.filePath, 'data')
     this.close()
     await this.plugin.router.openProjectLink(project.filePath)
   })

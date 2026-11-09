@@ -518,7 +518,24 @@ export class PMSettingTab extends PluginSettingTab {
           aliases: ['timesheet', 'hours', 'person'],
           control: { type: 'text', key: 'timesheetPerson' }
         },
-        this.projectDataFieldsPage()
+        this.projectDataFieldsPage(),
+        {
+          name: t('settings.projectDataSheetSync.name'),
+          desc: t('settings.projectDataSheetSync.desc'),
+          aliases: ['excel', 'xlsx', 'spreadsheet', 'project data'],
+          control: { type: 'toggle', key: 'projectDataSheetSync' }
+        },
+        {
+          name: t('settings.projectFolderProperty.name'),
+          desc: t('settings.projectFolderProperty.desc'),
+          aliases: ['excel', 'xlsx', 'project folder', 'projektordner'],
+          control: {
+            type: 'text',
+            key: 'projectFolderProperty',
+            placeholder: 'projektordner',
+            validate: (value) => (isValidDataKey(value.trim()) ? undefined : t('settings.projectDataField.invalidKey'))
+          }
+        }
       ]
     }
   }

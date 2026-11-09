@@ -135,6 +135,11 @@ export class ProjectOverviewView extends ItemView {
       if (this.project && this.plugin.projectFiles.concerns(this.project.filePath, path)) this.scheduleFileRender()
     }
     this.registerEvent(this.app.metadataCache.on('changed', (file) => onFile(file.path)))
+    this.register(
+      this.plugin.projectDataSync.onStatusChange((path) => {
+        if (path === this.project?.filePath) this.scheduleFileRender()
+      })
+    )
     this.registerEvent(this.app.vault.on('create', (file) => onFile(file.path)))
     this.registerEvent(this.app.vault.on('delete', (file) => onFile(file.path)))
     this.registerEvent(
@@ -167,6 +172,8 @@ export class ProjectOverviewView extends ItemView {
     const path = this.state.filePath
     this.project = path ? await this.plugin.store.loadProjectByPath(path) : null
     refreshTabTitle(this.leaf)
+    // Someone may have changed the spreadsheet since the last look.
+    if (this.project) void this.plugin.projectDataSync.sync(this.project.filePath)
     if (!this.project) {
       this.renderMissing()
       return

@@ -71,6 +71,7 @@ import { Notifier } from './components/Notifier'
 import { AutoArchiver } from './components/AutoArchiver'
 import { IdRepair } from './components/IdRepair'
 import { ProjectFiles, type ProjectFileKind } from './components/ProjectFiles'
+import { ProjectDataSync } from './components/ProjectDataSync'
 import { TimesheetEntryModal } from './modals/TimesheetEntryModal'
 import { ParticipantsModal } from './modals/ParticipantsModal'
 import { migrateBoardCardConfig, migrateProjects, migrateProjectLayout, migrateTaskRefs } from './migration'
@@ -87,6 +88,7 @@ export default class PMPlugin extends Plugin {
   idRepair!: IdRepair
   router!: PMViewRouter
   projectFiles!: ProjectFiles
+  projectDataSync!: ProjectDataSync
   localApi!: LocalApiServer
   /** Leaves sent to the markdown editor for a note, which the swap leaves alone while they show it. */
   private markdownEscapes = new WeakMap<WorkspaceLeaf, string>()
@@ -125,6 +127,8 @@ export default class PMPlugin extends Plugin {
     // the index has caught up. Everything in it is safe to repeat.
     this.index.register(this, () => {
       void this.startupSweep()
+      // Sheets changed while Obsidian was closed come in once every project is known.
+      void this.projectDataSync.syncAll()
     })
     this.store = new ProjectStore(this.app, () => this.settings, this.index)
     this.store.registerVaultSync(this)
@@ -133,6 +137,8 @@ export default class PMPlugin extends Plugin {
     this.idRepair = new IdRepair(this)
     this.router = new PMViewRouter(this)
     this.projectFiles = new ProjectFiles(this.app, () => this.settings)
+    this.projectDataSync = new ProjectDataSync(this)
+    this.projectDataSync.register()
     const api = new LocalApi(this)
     this.register(api.attach())
     this.localApi = new LocalApiServer(
@@ -215,6 +221,21 @@ export default class PMPlugin extends Plugin {
       id: 'log-time',
       name: t('commands.logTime'),
       callback: () => this.withProjectPath((path) => this.logTimeFlow(path))
+    })
+
+    this.addCommand({
+      id: 'set-up-project-data',
+      name: t('commands.setUpProjectData'),
+      callback: safeAsync(() => this.projectDataSync.setUpAllProjects())
+    })
+
+    this.addCommand({
+      id: 'sync-project-sheets',
+      name: t('commands.syncProjectSheets'),
+      callback: safeAsync(async () => {
+        await this.projectDataSync.syncAll()
+        this.showNotice(t('sheet.syncDone'))
+      })
     })
 
     this.addCommand({

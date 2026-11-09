@@ -306,6 +306,10 @@ export function sortMeetings<T extends { name: string; created: number }>(meetin
 /** Properties every note may carry that say nothing about the project. */
 const NOTE_PROPERTIES = new Set(['tags', 'aliases', 'cssclasses', 'position'])
 
+export function isNoteProperty(key: string): boolean {
+  return NOTE_PROPERTIES.has(key)
+}
+
 export interface ProjectDataGroup {
   name: string
   items: { key: string; label: string; value: string }[]
@@ -327,7 +331,9 @@ function dataValue(raw: unknown): string {
 export function projectDataGroups(
   fields: readonly ProjectDataField[],
   frontmatter: Record<string, unknown> | null | undefined,
-  otherGroup: string
+  otherGroup: string,
+  /** Properties the caller shows on its own, such as the project folder. */
+  hidden: readonly string[] = []
 ): ProjectDataGroup[] {
   const data = frontmatter ?? {}
   const groups: ProjectDataGroup[] = []
@@ -339,8 +345,9 @@ export function projectDataGroups(
     }
     return group
   }
-  const known = new Set(fields.map((field) => field.key))
+  const known = new Set([...hidden, ...fields.map((field) => field.key)])
   for (const field of fields) {
+    if (hidden.includes(field.key)) continue
     const value = dataValue(data[field.key])
     if (value) groupOf(field.group).items.push({ key: field.key, label: field.label, value })
   }

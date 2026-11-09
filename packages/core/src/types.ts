@@ -399,6 +399,12 @@ export interface PMSettings {
   timesheetPerson: string
   /** The properties of a project's data note, in the order the overview shows them. */
   projectDataFields: ProjectDataField[]
+  /** The data note property naming the project's folder outside the vault, where its spreadsheet goes. */
+  projectFolderProperty: string
+  /** Whether each project's data note is kept in step with a spreadsheet. */
+  projectDataSheetSync: boolean
+  /** What the last spreadsheet sync of each project left behind, by project path. */
+  projectDataSheets: Record<string, { path: string; mtime: number; hash: string }>
   /** Icons for priorities that don't carry their own. */
   priorityIcons: PriorityIconSet
   /** Task properties every project starts with. A project adds to these, or overrides one by id. */
@@ -545,6 +551,9 @@ export const DEFAULT_SETTINGS: PMSettings = {
   timesheetFile: 'Timesheet',
   timesheetPerson: '',
   projectDataFields: [],
+  projectFolderProperty: 'projektordner',
+  projectDataSheetSync: true,
+  projectDataSheets: {},
   priorityIcons: 'chevrons',
   customFields: [],
   globalTeamMembers: [],

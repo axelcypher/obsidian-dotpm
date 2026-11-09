@@ -143,8 +143,28 @@ export function renderProjectDataSection(parent: HTMLElement, ctx: FileSectionCo
   const file = plugin.projectFiles.file(ctx.projectPath, 'data')
   const section = ctx.section(parent, t('overview.projectData'))
   editAction(section, ctx, 'data')
+  if (plugin.settings.projectDataSheetSync) {
+    action(section, 'sheet', t('sheet.open'), () => plugin.projectDataSync.openSheet(ctx.projectPath))
+  }
+  const status = plugin.projectDataSync.status(ctx.projectPath)
+  if (status && !status.ok) section.createDiv({ cls: 'pm-overview-sheet-status', text: status.message })
+  const folder = plugin.projectDataSync.externalFolder(ctx.projectPath)
+  if (folder) {
+    const row = section.createDiv('pm-overview-folder')
+    const link = row.createEl('button', {
+      cls: 'pm-overview-link',
+      text: folder,
+      attr: { title: t('sheet.openFolder') }
+    })
+    link.addEventListener(
+      'click',
+      safeAsync(() => plugin.projectDataSync.openFolder(ctx.projectPath))
+    )
+  }
   const frontmatter = file ? plugin.app.metadataCache.getFileCache(file)?.frontmatter : null
-  const groups = projectDataGroups(plugin.settings.projectDataFields, frontmatter, t('projectData.more'))
+  const groups = projectDataGroups(plugin.settings.projectDataFields, frontmatter, t('projectData.more'), [
+    plugin.settings.projectFolderProperty
+  ])
   if (!groups.length) {
     emptyState(section, t('projectData.empty'), {
       label: file ? t('projectFiles.edit') : t('projectData.create'),

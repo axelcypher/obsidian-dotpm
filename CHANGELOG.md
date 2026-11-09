@@ -7,6 +7,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [2.9.0] - 2026-11-09
+
+### Highlights
+
+- **Project files:** Every project gets a folder of meeting notes, a participants list, a project data note and a timesheet, and its overview shows all of them. Meetings read as running text, newest first; the data shows grouped, ready for other programs to read from the same note.
+- **Log time in one go:** Date, hours, who and what, then Enter.
+
+### Added
+
+- Added meeting notes, one per meeting in the project's folder, created with "New meeting" and shown on the project overview between description and milestones
+- Added a participants note per project, a table of names, roles, companies and contact details, listed on the project overview
+- Added a project data note per project whose properties the overview shows grouped, with the fields set in the settings: client, plot and zoning plan to start with
+- Added a timesheet per project and "Log time", from the command palette, the project overview and the project's context menu
+- Added "Project files" to the settings, with the names of the meetings folder and the notes, who time is booked for, and the project data fields
+
 ## [2.8.0] - 2026-11-09
 
 ### Highlights

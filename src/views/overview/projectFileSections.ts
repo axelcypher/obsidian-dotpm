@@ -10,13 +10,16 @@ import {
   parseTimesheet,
   projectDataGroups,
   summarizeTimesheet,
-  t
+  t,
+  tn
 } from '@dotpm/core'
-import { IconButton, renderPropRow, safeAsync } from '@dotpm/ui'
+import { IconButton, safeAsync } from '@dotpm/ui'
 import type { ProjectFileKind } from '../../components/ProjectFiles'
 
 /** Entries the timesheet section lists below the totals. */
 const RECENT_ENTRIES = 3
+/** Characters after which a project data value folds to three lines. */
+const LONG_VALUE = 120
 
 const FRONTMATTER = /^---\r?\n[\s\S]*?\r?\n---(\r?\n|$)/
 const EMAIL = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
@@ -116,11 +119,22 @@ export function renderMeetingsSection(parent: HTMLElement, ctx: FileSectionConte
   })
 }
 
-function renderValue(value: string): HTMLElement {
-  const cell = createDiv('pm-prop-value pm-overview-data-value')
-  if (EMAIL.test(value)) cell.createEl('a', { text: value, href: `mailto:${value}` })
-  else cell.setText(value)
-  return cell
+/**
+ * Label and value side by side in two tight columns. A long value folds after three lines
+ * and opens on a click.
+ */
+function renderDataList(parent: HTMLElement, items: { label: string; value: string }[]): void {
+  const list = parent.createDiv('pm-data-list')
+  for (const item of items) {
+    list.createDiv({ cls: 'pm-data-label', text: item.label })
+    const value = list.createDiv('pm-data-value')
+    if (EMAIL.test(item.value)) value.createEl('a', { text: item.value, href: `mailto:${item.value}` })
+    else value.setText(item.value)
+    if (item.value.length > LONG_VALUE || item.value.includes('\n')) {
+      value.addClass('is-clamped')
+      value.addEventListener('click', () => value.toggleClass('is-clamped', !value.hasClass('is-clamped')))
+    }
+  }
 }
 
 /** The data note's properties under their groups, in the order the settings give the fields. */
@@ -140,12 +154,14 @@ export function renderProjectDataSection(parent: HTMLElement, ctx: FileSectionCo
   }
   for (const group of groups) {
     section.createDiv({ cls: 'pm-overview-data-group', text: group.name })
-    const list = section.createDiv('pm-overview-props')
-    for (const item of group.items) renderPropRow(list, item.label, () => renderValue(item.value))
+    renderDataList(section, group.items)
   }
 }
 
-/** The participants table as one entry per person: name and role, then company and how to reach them. */
+/**
+ * How many people the project has, and a button that lists them in a window: a long list
+ * would crowd the side column.
+ */
 export function renderParticipantsSection(parent: HTMLElement, ctx: FileSectionContext): void {
   const { plugin } = ctx
   const file = plugin.projectFiles.file(ctx.projectPath, 'participants')
@@ -159,26 +175,18 @@ export function renderParticipantsSection(parent: HTMLElement, ctx: FileSectionC
     emptyState(section, t('participants.empty'), create)
     return
   }
-  const list = section.createDiv('pm-participants')
+  const line = section.createDiv('pm-participants-summary')
   void (async () => {
     const participants = parseParticipants(await plugin.app.vault.cachedRead(file))
-    if (!list.isConnected) return
+    if (!line.isConnected) return
     if (!participants.length) {
-      emptyState(list, t('participants.empty'), create)
+      emptyState(line, t('participants.empty'), create)
       return
     }
-    for (const person of participants) {
-      const row = list.createDiv('pm-participant')
-      const head = row.createDiv('pm-participant-head')
-      head.createSpan({ cls: 'pm-participant-name', text: person.name })
-      if (person.role) head.createSpan({ cls: 'pm-participant-role', text: person.role })
-      const details = row.createDiv('pm-participant-details')
-      if (person.company) details.createSpan({ text: person.company })
-      if (person.email) details.createEl('a', { text: person.email, href: `mailto:${person.email}` })
-      if (person.phone) {
-        details.createEl('a', { text: person.phone, href: `tel:${person.phone.replace(/[^\d+]/g, '')}` })
-      }
-    }
+    emptyState(line, tn('participants.count', participants.length), {
+      label: t('participants.show'),
+      onClick: () => plugin.showParticipants(ctx.projectPath)
+    })
   })()
 }
 
@@ -206,12 +214,13 @@ export function renderTimesheetSection(parent: HTMLElement, ctx: FileSectionCont
     const summary = summarizeTimesheet(entries)
     body.createDiv({ cls: 'pm-timesheet-total', text: t('timesheet.total', { hours: hours(summary.total) }) })
     if (summary.byPerson.length > 1 || summary.byPerson[0]?.person) {
-      const people = body.createDiv('pm-overview-props')
-      for (const { person, hours: booked } of summary.byPerson) {
-        renderPropRow(people, person || t('timesheet.noPerson'), () =>
-          createDiv({ cls: 'pm-prop-value', text: `${hours(booked)} h` })
-        )
-      }
+      renderDataList(
+        body,
+        summary.byPerson.map(({ person, hours: booked }) => ({
+          label: person || t('timesheet.noPerson'),
+          value: `${hours(booked)} h`
+        }))
+      )
     }
     body.createDiv({ cls: 'pm-overview-data-group', text: t('timesheet.recent') })
     const recent = [...entries].sort((a, b) => b.date.localeCompare(a.date)).slice(0, RECENT_ENTRIES)

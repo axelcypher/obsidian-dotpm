@@ -198,6 +198,12 @@ function openProjectContextMenu(ctx: ProjectListContext, ref: ProjectRef, e: Mou
       .setIcon('messages-square')
       .onClick(safeAsync(() => ctx.plugin.newMeetingFlow(ref.path)))
   )
+  menu.addItem((item) =>
+    item
+      .setTitle(t('overview.participants'))
+      .setIcon('contact')
+      .onClick(safeAsync(() => ctx.plugin.showParticipants(ref.path)))
+  )
   menu.addSeparator()
   menu.addItem((item) =>
     item

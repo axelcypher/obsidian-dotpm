@@ -4,6 +4,7 @@ import {
   appendTimesheetEntry,
   defaultProjectDataFields,
   defaultProjectFileNames,
+  filterParticipants,
   isValidDataKey,
   meetingDate,
   meetingFileName,
@@ -66,6 +67,17 @@ describe('participants', () => {
     expect(parseParticipants(text)).toEqual([
       { name: 'M. Rövekamp', role: 'Bauaufsicht', company: 'Stadt Soest', email: 'm.r@soest.de', phone: '02921 1234' }
     ])
+  })
+
+  it('filters by every word of the query across all columns', () => {
+    const people = [
+      { name: 'M. Rövekamp', role: 'Bauaufsicht', company: 'Stadt Soest', email: '', phone: '' },
+      { name: 'K. Eickhoff', role: 'Balkonanlage', company: 'Eickhoff GmbH', email: 'info@eick.de', phone: '' }
+    ]
+    expect(filterParticipants(people, 'soest').map((person) => person.name)).toEqual(['M. Rövekamp'])
+    expect(filterParticipants(people, 'gmbh balkon').map((person) => person.name)).toEqual(['K. Eickhoff'])
+    expect(filterParticipants(people, '  ')).toHaveLength(2)
+    expect(filterParticipants(people, 'statik')).toEqual([])
   })
 
   it('takes the first column as the name when no heading says so', () => {

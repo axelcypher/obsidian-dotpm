@@ -23,6 +23,7 @@ import {
   localApiPortFor,
   formatHours,
   locale,
+  parseParticipants,
   projectLabelValues,
   projectStatusProperty,
   projectTypeProperty,
@@ -71,6 +72,7 @@ import { AutoArchiver } from './components/AutoArchiver'
 import { IdRepair } from './components/IdRepair'
 import { ProjectFiles, type ProjectFileKind } from './components/ProjectFiles'
 import { TimesheetEntryModal } from './modals/TimesheetEntryModal'
+import { ParticipantsModal } from './modals/ParticipantsModal'
 import { migrateBoardCardConfig, migrateProjects, migrateProjectLayout, migrateTaskRefs } from './migration'
 import { LocalApi } from './api/LocalApi'
 import { exportViewAsHtml } from './export/exportView'
@@ -213,6 +215,12 @@ export default class PMPlugin extends Plugin {
       id: 'log-time',
       name: t('commands.logTime'),
       callback: () => this.withProjectPath((path) => this.logTimeFlow(path))
+    })
+
+    this.addCommand({
+      id: 'show-participants',
+      name: t('commands.showParticipants'),
+      callback: () => this.withProjectPath(safeAsync((path: string) => this.showParticipants(path)))
     })
 
     this.addCommand({
@@ -657,6 +665,18 @@ export default class PMPlugin extends Plugin {
           t('timesheet.logged', { hours: formatHours(entry.hours, locale()), project: ref?.title ?? projectPath })
         )
       }
+    }).open()
+  }
+
+  /** Lists the project's participants in a window, read from its participants note. */
+  async showParticipants(projectPath: string): Promise<void> {
+    const file = this.projectFiles.file(projectPath, 'participants')
+    const participants = file ? parseParticipants(await this.app.vault.cachedRead(file)) : []
+    new ParticipantsModal(this.app, {
+      projectTitle: this.index.projectRef(projectPath)?.title ?? projectPath,
+      participants,
+      hasNote: !!file,
+      onEdit: () => this.openProjectFile(projectPath, 'participants')
     }).open()
   }
 

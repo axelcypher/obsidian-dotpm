@@ -128,6 +128,16 @@ export function parseParticipants(markdown: string): Participant[] {
     .filter((participant) => Object.values(participant).some(Boolean))
 }
 
+/** The participants whose name, role, company, email or phone holds every word of the query. */
+export function filterParticipants(participants: readonly Participant[], query: string): Participant[] {
+  const words = query.toLowerCase().split(/\s+/).filter(Boolean)
+  if (!words.length) return [...participants]
+  return participants.filter((participant) => {
+    const text = Object.values(participant).join(' ').toLowerCase()
+    return words.every((word) => text.includes(word))
+  })
+}
+
 /** A new participants note: the table's headings and one empty row to fill in. */
 export function participantsTemplate(): string {
   const header = [

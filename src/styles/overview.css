@@ -124,6 +124,10 @@
 .pm-overview-section {
   margin-top: 28px;
 }
+/* The side column holds several short sections; tighter spacing keeps them on one screen. */
+.pm-overview-side .pm-overview-section {
+  margin-top: 20px;
+}
 .pm-overview-side .pm-overview-section:first-child {
   margin-top: 0;
 }
@@ -452,44 +456,87 @@
 
 /* Project data, participants and timesheet in the side column. */
 .pm-overview-data-group {
-  margin: 12px 0 2px;
-  font-size: var(--font-ui-smaller);
+  margin: 8px 0 1px;
+  font-size: 11px;
   font-weight: 600;
-  color: var(--text-muted);
+  letter-spacing: 0.02em;
+  color: var(--text-faint);
+  text-transform: uppercase;
 }
 .pm-overview-section-head + .pm-overview-data-group {
   margin-top: 0;
 }
-.pm-overview-data-value {
+/* Label and value in two tight columns, small enough to keep the side column short. */
+.pm-data-list {
+  display: grid;
+  grid-template-columns: minmax(56px, 40%) minmax(0, 1fr);
+  gap: 1px 10px;
+  font-size: var(--font-ui-smaller);
+  line-height: 1.4;
+}
+.pm-data-label {
+  color: var(--text-muted);
+  overflow-wrap: break-word;
+}
+.pm-data-value {
+  color: var(--text-normal);
   white-space: pre-wrap;
   overflow-wrap: anywhere;
 }
-.pm-participant {
-  padding: 6px 0;
-  border-bottom: 1px solid var(--background-modifier-border);
+.pm-data-value.is-clamped {
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 3;
+  overflow: hidden;
+  cursor: pointer;
+}
+.pm-participants-summary .pm-overview-muted {
+  font-size: var(--font-ui-smaller);
+}
+
+/* The participants window: one row per person, as a table on wide screens and cards on narrow ones. */
+.pm-participants-modal {
+  width: min(900px, 92vw);
+}
+.pm-participants-table {
+  max-height: 60vh;
+  overflow-y: auto;
+  margin-bottom: 12px;
   font-size: var(--font-ui-small);
 }
-.pm-participant:last-child {
-  border-bottom: none;
+.pm-participants-row {
+  display: grid;
+  grid-template-columns: 1.2fr 1fr 1fr 1.3fr 1fr;
+  gap: 0 12px;
+  padding: 6px 4px;
+  border-bottom: 1px solid var(--background-modifier-border);
 }
-.pm-participant-head {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: baseline;
-  gap: 0 6px;
+.pm-participants-row > * {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+.pm-participants-head {
+  position: sticky;
+  top: 0;
+  background: var(--background-primary);
+  font-size: var(--font-ui-smaller);
+  font-weight: 600;
+  color: var(--text-muted);
 }
 .pm-participant-name {
   font-weight: 600;
 }
-.pm-participant-role {
+.pm-participant-role,
+.pm-participant-company {
   color: var(--text-muted);
 }
-.pm-participant-details {
-  display: flex;
-  flex-direction: column;
-  color: var(--text-muted);
-  font-size: var(--font-ui-smaller);
-  overflow-wrap: anywhere;
+@media (max-width: 640px) {
+  .pm-participants-row {
+    grid-template-columns: 1fr;
+  }
+  .pm-participants-head {
+    display: none;
+  }
 }
 .pm-timesheet-total {
   font-size: var(--font-ui-medium);

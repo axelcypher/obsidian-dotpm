@@ -7,6 +7,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [2.13.0] - 2026-11-09
+
+### Added
+
+- The local API and the MCP server now cover project status and types, project data, participants, meetings and the timesheet: ten new tools (`set_project_status`, `set_project_types`, `get_project_data`, `update_project_data`, `list_participants`, `add_participant`, `list_meetings`, `create_meeting`, `get_timesheet`, `log_time`) and the matching HTTP routes
+- Project listings in the API carry each project's status and types, and a project read lists the status and type presets
+
+### Fixed
+
+- In an English-language vault, the person of a timesheet entry and some participant columns weren't found under the template's own headings
+
 ## [2.12.0] - 2026-11-09
 
 ### Changed

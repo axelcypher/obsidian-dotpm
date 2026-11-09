@@ -7,6 +7,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [2.11.0] - 2026-11-09
+
+### Highlights
+
+- **Project data in Excel:** Every project's data comes as a spreadsheet too, in the project folder on your drive. Change it in Obsidian or in Excel; the other side follows.
+
+### Added
+
+- Project data notes are kept in step with a spreadsheet (.xlsx) both ways, in the project folder outside the vault or beside the note
+- The spreadsheet has a list sheet to read and edit and a one-row sheet for mail merges
+- Added "Create project data and spreadsheets for all projects", which also takes the project folder from a "Projektordner:" line of each description
+- Added "Sync project data spreadsheets now"
+- The project overview shows the project folder, opens the spreadsheet, and says when a spreadsheet can't be synced
+- New projects get their project data note right away
+
 ## [2.10.0] - 2026-11-09
 
 ### Added

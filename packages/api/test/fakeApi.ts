@@ -1,15 +1,37 @@
-import { DEFAULT_PRIORITIES, DEFAULT_STATUSES, makeProject, makeTask, type Project } from '@dotpm/core'
+import {
+  DEFAULT_PRIORITIES,
+  DEFAULT_PROJECT_STATUSES,
+  DEFAULT_PROJECT_TYPES,
+  DEFAULT_STATUSES,
+  makeProject,
+  makeTask,
+  resolveProjectLabel,
+  summarizeTimesheet,
+  type Participant,
+  type Project,
+  type ProjectDataValue,
+  type TimesheetEntry
+} from '@dotpm/core'
 import type {
   Change,
   ChangePage,
   DomainApi,
+  MeetingResource,
+  ProjectDataResource,
   ProjectResource,
   ProjectSummary,
   TaskResource,
-  TaskSearch
+  TaskSearch,
+  TimesheetResource
 } from '../src/contract'
 import { ApiRequestError } from '../src/contract'
 import {
+  parseMeetingCreate,
+  parseParticipant,
+  parseProjectDataWrite,
+  parseProjectStatus,
+  parseProjectTypes,
+  parseTimeEntry,
   parseProjectCreate,
   parseTaskCreate,
   parseTaskMove,
@@ -38,6 +60,12 @@ export class FakeApi implements DomainApi {
   calls: string[] = []
   projectCount = 1
   changeLog: Change[] = []
+  status: string | null = null
+  types: string[] = []
+  data: Record<string, ProjectDataValue> = {}
+  participants: Participant[] = []
+  meetings: MeetingResource[] = []
+  timesheet: TimesheetEntry[] = []
 
   constructor() {
     this.project.id = 'p1'
@@ -57,7 +85,9 @@ export class FakeApi implements DomainApi {
       parentId: null,
       archived: this.project.archived === true,
       taskCount: this.project.tasks.length,
-      doneCount: this.project.tasks.filter((t) => t.status === 'done').length
+      doneCount: this.project.tasks.filter((t) => t.status === 'done').length,
+      status: this.status,
+      types: [...this.types]
     }
   }
 
@@ -97,6 +127,8 @@ export class FakeApi implements DomainApi {
       customFields: [],
       statuses: CONFIG.statuses,
       priorities: CONFIG.priorities,
+      projectStatuses: DEFAULT_PROJECT_STATUSES,
+      projectTypes: DEFAULT_PROJECT_TYPES,
       createdAt: this.project.createdAt,
       updatedAt: this.project.updatedAt
     }
@@ -123,11 +155,15 @@ export class FakeApi implements DomainApi {
       archived: false,
       taskCount: 0,
       doneCount: 0,
+      status: null,
+      types: [],
       description: project.description,
       teamMembers: project.teamMembers,
       customFields: [],
       statuses: CONFIG.statuses,
       priorities: CONFIG.priorities,
+      projectStatuses: DEFAULT_PROJECT_STATUSES,
+      projectTypes: DEFAULT_PROJECT_TYPES,
       createdAt: project.createdAt,
       updatedAt: project.updatedAt
     }
@@ -193,5 +229,103 @@ export class FakeApi implements DomainApi {
       changes: this.changeLog.filter((c) => since !== null && c.seq > since),
       reset: false
     }
+  }
+
+  async setProjectStatus(projectId: string, input: unknown): Promise<ProjectResource> {
+    this.checkProject(projectId)
+    const status = parseProjectStatus(input)
+    this.calls.push(`setProjectStatus ${projectId} ${status}`)
+    const preset = status === null ? null : resolveProjectLabel(DEFAULT_PROJECT_STATUSES, status)
+    if (status !== null && !preset) throw new ApiRequestError('invalid', `unknown project status ${status}`)
+    this.status = preset?.id ?? null
+    return this.resource()
+  }
+
+  async setProjectTypes(projectId: string, input: unknown): Promise<ProjectResource> {
+    this.checkProject(projectId)
+    const types = parseProjectTypes(input)
+    this.calls.push(`setProjectTypes ${projectId} ${types.join(',')}`)
+    this.types = types.map((type) => resolveProjectLabel(DEFAULT_PROJECT_TYPES, type)?.id ?? type)
+    return this.resource()
+  }
+
+  private dataResource(): ProjectDataResource {
+    return {
+      projectId: this.project.id,
+      folder: '',
+      rows: Object.entries(this.data).map(([key, value]) => ({ group: '', label: key, key, value }))
+    }
+  }
+
+  async getProjectData(projectId: string): Promise<ProjectDataResource> {
+    this.calls.push(`getProjectData ${projectId}`)
+    this.checkProject(projectId)
+    return this.dataResource()
+  }
+
+  async updateProjectData(projectId: string, input: unknown): Promise<ProjectDataResource> {
+    this.checkProject(projectId)
+    const values = parseProjectDataWrite(input)
+    this.calls.push(`updateProjectData ${projectId} ${Object.keys(values).join(',')}`)
+    Object.assign(this.data, values)
+    return this.dataResource()
+  }
+
+  async listParticipants(projectId: string): Promise<Participant[]> {
+    this.calls.push(`listParticipants ${projectId}`)
+    this.checkProject(projectId)
+    return [...this.participants]
+  }
+
+  async addParticipant(projectId: string, input: unknown): Promise<Participant[]> {
+    this.checkProject(projectId)
+    const person = parseParticipant(input)
+    this.calls.push(`addParticipant ${projectId} ${person.name}`)
+    this.participants.push(person)
+    return [...this.participants]
+  }
+
+  async listMeetings(projectId: string): Promise<MeetingResource[]> {
+    this.calls.push(`listMeetings ${projectId}`)
+    this.checkProject(projectId)
+    return [...this.meetings]
+  }
+
+  async createMeeting(projectId: string, input: unknown): Promise<MeetingResource> {
+    this.checkProject(projectId)
+    const create = parseMeetingCreate(input)
+    this.calls.push(`createMeeting ${projectId} ${create.title}`)
+    const date = create.date ?? '2030-01-01'
+    const meeting = {
+      path: `Projects/Demo/Meetings/${date} ${create.title}.md`,
+      date,
+      title: create.title,
+      content: create.content ?? ''
+    }
+    this.meetings.unshift(meeting)
+    return meeting
+  }
+
+  private timesheetResource(): TimesheetResource {
+    return { projectId: this.project.id, entries: [...this.timesheet], ...summarizeTimesheet(this.timesheet) }
+  }
+
+  async getTimesheet(projectId: string): Promise<TimesheetResource> {
+    this.calls.push(`getTimesheet ${projectId}`)
+    this.checkProject(projectId)
+    return this.timesheetResource()
+  }
+
+  async logTime(projectId: string, input: unknown): Promise<TimesheetResource> {
+    this.checkProject(projectId)
+    const entry = parseTimeEntry(input)
+    this.calls.push(`logTime ${projectId} ${entry.hours}`)
+    this.timesheet.push({
+      date: entry.date ?? '2030-01-01',
+      hours: entry.hours,
+      person: entry.person ?? '',
+      activity: entry.activity ?? ''
+    })
+    return this.timesheetResource()
   }
 }

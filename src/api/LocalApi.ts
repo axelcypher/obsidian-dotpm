@@ -1,7 +1,29 @@
-import type { Project, Task } from '@dotpm/core'
-import { displayName, findParentId, findTaskById, flattenTasks, makeTask } from '@dotpm/core'
+import { TFile } from 'obsidian'
+import type { Participant, Project, ProjectDataRow, ProjectLabelConfig, Task } from '@dotpm/core'
+import {
+  appendParticipant,
+  displayName,
+  findParentId,
+  findTaskById,
+  flattenTasks,
+  makeTask,
+  meetingDate,
+  meetingTitle,
+  noteBody,
+  parseParticipants,
+  parseTimesheet,
+  resolveProjectLabel,
+  summarizeTimesheet,
+  today
+} from '@dotpm/core'
 import {
   ApiRequestError,
+  parseMeetingCreate,
+  parseParticipant,
+  parseProjectDataWrite,
+  parseProjectStatus,
+  parseProjectTypes,
+  parseTimeEntry,
   parseProjectCreate,
   parseTaskCreate,
   parseTaskMove,
@@ -12,14 +34,19 @@ import {
   toTaskResource,
   type ChangePage,
   type DomainApi,
+  type MeetingResource,
+  type ProjectDataResource,
+  type ProjectLabelPresets,
   type ProjectResource,
   type ProjectSummary,
   type TaskResource,
   type TaskSearch,
-  type TaskWrite
+  type TaskWrite,
+  type TimesheetResource
 } from '@dotpm/api'
 import type PMPlugin from '#main'
 import { findIgnoringCase, newProjectFolder, projectFilePath, TaskFileNameConflictError, type ProjectRef } from '#store'
+import { projectLabelIds } from '#ui/projectLabels'
 import { ChangeLog } from './ChangeLog'
 
 const SCHEDULE_FIELDS: Array<keyof TaskWrite> = ['start', 'due', 'dependencies', 'status', 'type']
@@ -97,13 +124,13 @@ export class LocalApi implements DomainApi {
       ...this.summary(ref),
       archived: archived || (parent ? this.plugin.index.isArchived(parent.path) : false)
     }
-    return toProjectResource(project, this.plugin.store.configFor(project), summary)
+    return toProjectResource(project, this.plugin.store.configFor(project), summary, this.presets())
   }
 
   async getProject(projectId: string): Promise<ProjectResource> {
     const ref = this.refById(projectId)
     const project = await this.load(ref)
-    return toProjectResource(project, this.plugin.store.configFor(project), this.summary(ref))
+    return toProjectResource(project, this.plugin.store.configFor(project), this.summary(ref), this.presets())
   }
 
   async createProject(input: unknown): Promise<ProjectResource> {
@@ -123,7 +150,7 @@ export class LocalApi implements DomainApi {
     const ref = refOf(project)
     this.created.set(project.id, ref)
     this.plugin.refreshViews()
-    return toProjectResource(project, this.plugin.store.configFor(project), this.summary(ref))
+    return toProjectResource(project, this.plugin.store.configFor(project), this.summary(ref), this.presets())
   }
 
   async listTasks(projectId: string, includeArchived = false): Promise<TaskResource[]> {
@@ -250,6 +277,111 @@ export class LocalApi implements DomainApi {
     return this.changeLog.since(since)
   }
 
+  async setProjectStatus(projectId: string, input: unknown): Promise<ProjectResource> {
+    const ref = this.refById(projectId)
+    const asked = parseProjectStatus(input)
+    const status = asked === null ? null : this.preset(this.plugin.settings.projectStatuses, asked, 'project status').id
+    await this.plugin.setProjectStatus(ref.path, status)
+    const project = await this.load(ref)
+    // The index reads the note back later; the answer reflects the write just made.
+    const summary = { ...this.summary(ref), status }
+    return toProjectResource(project, this.plugin.store.configFor(project), summary, this.presets())
+  }
+
+  async setProjectTypes(projectId: string, input: unknown): Promise<ProjectResource> {
+    const ref = this.refById(projectId)
+    const presets = this.plugin.settings.projectTypes
+    const types = [...new Set(parseProjectTypes(input).map((type) => this.preset(presets, type, 'project type').id))]
+    await this.plugin.setProjectTypes(ref.path, types)
+    const project = await this.load(ref)
+    const summary = { ...this.summary(ref), types }
+    return toProjectResource(project, this.plugin.store.configFor(project), summary, this.presets())
+  }
+
+  async getProjectData(projectId: string): Promise<ProjectDataResource> {
+    const ref = this.refById(projectId)
+    const note = this.plugin.projectFiles.file(ref.path, 'data')
+    const frontmatter = note ? (this.plugin.app.metadataCache.getFileCache(note)?.frontmatter ?? {}) : {}
+    return this.dataResource(ref, this.plugin.projectDataSync.rows(frontmatter))
+  }
+
+  async updateProjectData(projectId: string, input: unknown): Promise<ProjectDataResource> {
+    const ref = this.refById(projectId)
+    const values = parseProjectDataWrite(input)
+    const note = await this.plugin.projectFiles.ensure(ref.path, 'data')
+    let rows: ProjectDataRow[] = []
+    await this.plugin.app.fileManager.processFrontMatter(note, (frontmatter: Record<string, unknown>) => {
+      Object.assign(frontmatter, values)
+      rows = this.plugin.projectDataSync.rows(frontmatter)
+    })
+    return this.dataResource(ref, rows)
+  }
+
+  private dataResource(ref: ProjectRef, rows: ProjectDataRow[]): ProjectDataResource {
+    const folder = rows.find((row) => row.key === this.plugin.settings.projectFolderProperty)?.value
+    return { projectId: ref.id, folder: typeof folder === 'string' ? folder : '', rows }
+  }
+
+  async listParticipants(projectId: string): Promise<Participant[]> {
+    const ref = this.refById(projectId)
+    return parseParticipants(await this.read(this.plugin.projectFiles.path(ref.path, 'participants')))
+  }
+
+  async addParticipant(projectId: string, input: unknown): Promise<Participant[]> {
+    const ref = this.refById(projectId)
+    const person = parseParticipant(input)
+    const file = await this.plugin.projectFiles.ensure(ref.path, 'participants')
+    const text = await this.plugin.app.vault.process(file, (current) => appendParticipant(current, person))
+    return parseParticipants(text)
+  }
+
+  async listMeetings(projectId: string): Promise<MeetingResource[]> {
+    const ref = this.refById(projectId)
+    const files = this.plugin.projectFiles.meetings(ref.path)
+    return Promise.all(files.map(async (file) => this.meeting(file, await this.plugin.app.vault.read(file))))
+  }
+
+  async createMeeting(projectId: string, input: unknown): Promise<MeetingResource> {
+    const ref = this.refById(projectId)
+    const create = parseMeetingCreate(input)
+    const file = await this.plugin.projectFiles.createMeeting(ref.path, create.title, {
+      date: create.date,
+      content: create.content
+    })
+    return this.meeting(file, create.content ?? '')
+  }
+
+  private meeting(file: TFile, text: string): MeetingResource {
+    return {
+      path: file.path,
+      date: meetingDate(file.basename),
+      title: meetingTitle(file.basename) || file.basename,
+      content: noteBody(text)
+    }
+  }
+
+  async getTimesheet(projectId: string): Promise<TimesheetResource> {
+    const ref = this.refById(projectId)
+    return this.timesheet(ref, await this.read(this.plugin.projectFiles.path(ref.path, 'timesheet')))
+  }
+
+  async logTime(projectId: string, input: unknown): Promise<TimesheetResource> {
+    const ref = this.refById(projectId)
+    const entry = parseTimeEntry(input)
+    await this.plugin.projectFiles.addTimesheetEntry(ref.path, {
+      date: entry.date ?? today().toString(),
+      hours: entry.hours,
+      person: entry.person ?? this.plugin.settings.timesheetPerson,
+      activity: entry.activity ?? ''
+    })
+    return this.timesheet(ref, await this.read(this.plugin.projectFiles.path(ref.path, 'timesheet')))
+  }
+
+  private timesheet(ref: ProjectRef, text: string): TimesheetResource {
+    const entries = parseTimesheet(text)
+    return { projectId: ref.id, entries, ...summarizeTimesheet(entries) }
+  }
+
   private refById(projectId: string): ProjectRef {
     const indexed = this.plugin.index.projectRefs(true).find((ref) => ref.id === projectId)
     if (indexed) {
@@ -270,8 +402,26 @@ export class LocalApi implements DomainApi {
       parentId: this.parentIdOf(ref),
       archived: this.plugin.index.isArchived(ref.path),
       taskCount: counts.total,
-      doneCount: counts.done
+      doneCount: counts.done,
+      ...projectLabelIds(this.plugin, ref)
     }
+  }
+
+  private presets(): ProjectLabelPresets {
+    return { projectStatuses: this.plugin.settings.projectStatuses, projectTypes: this.plugin.settings.projectTypes }
+  }
+
+  /** The preset a client named by id or label; anything else is refused with the ids it could have used. */
+  private preset(presets: readonly ProjectLabelConfig[], value: string, what: string): ProjectLabelConfig {
+    const preset = resolveProjectLabel(presets, value)
+    if (preset) return preset
+    const known = presets.map((entry) => entry.id).join(', ') || 'none are set up'
+    throw new ApiRequestError('invalid', `unknown ${what} "${value}"; use one of: ${known}`)
+  }
+
+  private async read(path: string): Promise<string> {
+    const file = this.plugin.app.vault.getAbstractFileByPath(path)
+    return file instanceof TFile ? this.plugin.app.vault.read(file) : ''
   }
 
   private createdAt(path: string): ProjectRef | undefined {

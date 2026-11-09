@@ -11,11 +11,17 @@ import * as v from 'valibot'
 import { ApiRequestError, type DomainApi } from './contract'
 import {
   CREATE_FIELDS,
+  MEETING_FIELDS,
   MOVE_FIELDS,
+  PARTICIPANT_FIELDS,
   parseTaskSearch,
   PROJECT_CREATE_FIELDS,
+  PROJECT_DATA_FIELDS,
+  PROJECT_STATUS_FIELDS,
+  PROJECT_TYPES_FIELDS,
   SEARCH_FIELDS,
-  TASK_FIELDS
+  TASK_FIELDS,
+  TIME_ENTRY_FIELDS
 } from './resources'
 
 export interface ServerInfo {
@@ -26,7 +32,10 @@ export interface ServerInfo {
 const SERVER_ERROR = -32000
 
 const INSTRUCTIONS =
-  'Projects hold tasks in a tree. Read a project first to learn its status and priority ids before writing tasks.'
+  'Projects hold tasks in a tree. Read a project first to learn its status and priority ids before writing tasks. ' +
+  'A project also has a status and types picked from the projectStatuses and projectTypes get_project lists, and ' +
+  'keeps notes beside it: project data (key facts such as client and plot, also mirrored to a spreadsheet), ' +
+  'participants, one note per meeting, and a timesheet.'
 
 const PROJECT_TEMPLATE = 'dotpm://projects/{projectId}'
 const TASK_TEMPLATE = 'dotpm://tasks/{taskId}'
@@ -170,6 +179,70 @@ function registerTools(server: McpServer, api: DomainApi): void {
       await api.deleteTask(args.taskId)
       return { deleted: true }
     }
+  })
+
+  tool(server, 'set_project_status', {
+    description:
+      'Put a project in one of the projectStatuses get_project lists, by id or label, or clear it with null.',
+    inputSchema: v.object({ projectId, ...PROJECT_STATUS_FIELDS }),
+    run: ({ projectId: project, ...status }) => api.setProjectStatus(project, status)
+  })
+
+  tool(server, 'set_project_types', {
+    description:
+      'Set what a project is about: the projectTypes get_project lists, by id or label. The list replaces the current types; pass [] to clear.',
+    inputSchema: v.object({ projectId, ...PROJECT_TYPES_FIELDS }),
+    run: ({ projectId: project, ...types }) => api.setProjectTypes(project, types)
+  })
+
+  tool(server, 'get_project_data', {
+    description:
+      'The project data note: key facts such as the client, the plot and the zoning plan, one row per field with group, label, key and value, the project folder first.',
+    inputSchema: v.object({ projectId }),
+    run: (args) => api.getProjectData(args.projectId)
+  })
+
+  tool(server, 'update_project_data', {
+    description:
+      'Write values into the project data note by key, as get_project_data lists them. Keys left out stay; null empties one. The spreadsheet copy follows.',
+    inputSchema: v.object({ projectId, ...PROJECT_DATA_FIELDS }),
+    run: ({ projectId: project, ...write }) => api.updateProjectData(project, write)
+  })
+
+  tool(server, 'list_participants', {
+    description: 'Everyone on a project with role, company, email and phone.',
+    inputSchema: v.object({ projectId }),
+    run: (args) => api.listParticipants(args.projectId)
+  })
+
+  tool(server, 'add_participant', {
+    description: 'Add a person to the project participants. Returns the whole list.',
+    inputSchema: v.object({ projectId, ...PARTICIPANT_FIELDS }),
+    run: ({ projectId: project, ...person }) => api.addParticipant(project, person)
+  })
+
+  tool(server, 'list_meetings', {
+    description: 'The project meeting notes, newest first, each with date, title and its Markdown.',
+    inputSchema: v.object({ projectId }),
+    run: (args) => api.listMeetings(args.projectId)
+  })
+
+  tool(server, 'create_meeting', {
+    description: 'Create a meeting note for a project, dated today unless date is given, with the minutes as Markdown.',
+    inputSchema: v.object({ projectId, ...MEETING_FIELDS }),
+    run: ({ projectId: project, ...meeting }) => api.createMeeting(project, meeting)
+  })
+
+  tool(server, 'get_timesheet', {
+    description: 'The hours booked on a project: every entry, the total and the hours per person.',
+    inputSchema: v.object({ projectId }),
+    run: (args) => api.getTimesheet(args.projectId)
+  })
+
+  tool(server, 'log_time', {
+    description: 'Book hours on a project, dated today unless date is given. Returns the whole timesheet.',
+    inputSchema: v.object({ projectId, ...TIME_ENTRY_FIELDS }),
+    run: ({ projectId: project, ...entry }) => api.logTime(project, entry)
   })
 
   tool(server, 'list_changes', {

@@ -1,4 +1,16 @@
-import type { CustomFieldDef, PriorityConfig, Recurrence, StatusConfig, TaskType, TimeLog } from '@dotpm/core'
+import type {
+  CustomFieldDef,
+  Participant,
+  PriorityConfig,
+  ProjectDataRow,
+  ProjectDataValue,
+  ProjectLabelConfig,
+  Recurrence,
+  StatusConfig,
+  TaskType,
+  TimeLog,
+  TimesheetEntry
+} from '@dotpm/core'
 
 /** What a listing shows for a project, cheap enough to serve without loading it. */
 export interface ProjectSummary {
@@ -12,6 +24,10 @@ export interface ProjectSummary {
   archived: boolean
   taskCount: number
   doneCount: number
+  /** The id of the project's status preset, or the value as written when no preset names it. */
+  status: string | null
+  /** The ids of the project's types, in the order its note lists them. */
+  types: string[]
 }
 
 export interface ProjectResource extends ProjectSummary {
@@ -20,8 +36,56 @@ export interface ProjectResource extends ProjectSummary {
   customFields: CustomFieldDef[]
   statuses: StatusConfig[]
   priorities: PriorityConfig[]
+  /** The status presets a project can be in, in list order: what `status` takes. */
+  projectStatuses: ProjectLabelConfig[]
+  /** The type presets a project can carry: what `types` takes. */
+  projectTypes: ProjectLabelConfig[]
   createdAt: string
   updatedAt: string
+}
+
+/** The project's data note: one row per field, the project folder first. */
+export interface ProjectDataResource {
+  projectId: string
+  /** The project's folder outside the vault, empty without one. */
+  folder: string
+  rows: ProjectDataRow[]
+}
+
+/** Values to write into the data note, by property; null empties one. */
+export interface ProjectDataWrite {
+  values: Record<string, ProjectDataValue>
+}
+
+export interface MeetingResource {
+  path: string
+  /** `YYYY-MM-DD` from the note's name, empty without one. */
+  date: string
+  title: string
+  /** The note's Markdown, without its properties. */
+  content: string
+}
+
+export interface MeetingCreate {
+  title: string
+  /** `YYYY-MM-DD`; today when left out. */
+  date?: string
+  content?: string
+}
+
+export interface TimesheetResource {
+  projectId: string
+  entries: TimesheetEntry[]
+  total: number
+  byPerson: { person: string; hours: number }[]
+}
+
+export interface TimeEntryCreate {
+  hours: number
+  /** `YYYY-MM-DD`; today when left out. */
+  date?: string
+  person?: string
+  activity?: string
 }
 
 export interface TaskResource {
@@ -160,4 +224,20 @@ export interface DomainApi {
   archiveTask(taskId: string, archived: boolean): Promise<TaskResource>
   deleteTask(taskId: string): Promise<void>
   changes(since: number | null): Promise<ChangePage>
+  /** Puts the project in a status preset, by id or label, or clears it with null. */
+  setProjectStatus(projectId: string, input: unknown): Promise<ProjectResource>
+  /** Replaces the project's types with the presets given, by id or label. */
+  setProjectTypes(projectId: string, input: unknown): Promise<ProjectResource>
+  getProjectData(projectId: string): Promise<ProjectDataResource>
+  /** Writes the values given into the data note, creating it when needed; others stay. */
+  updateProjectData(projectId: string, input: unknown): Promise<ProjectDataResource>
+  listParticipants(projectId: string): Promise<Participant[]>
+  /** Adds a row to the participants table and returns them all. */
+  addParticipant(projectId: string, input: unknown): Promise<Participant[]>
+  /** Meeting notes, newest first. */
+  listMeetings(projectId: string): Promise<MeetingResource[]>
+  createMeeting(projectId: string, input: unknown): Promise<MeetingResource>
+  getTimesheet(projectId: string): Promise<TimesheetResource>
+  /** Books an entry into the timesheet and returns the whole sheet. */
+  logTime(projectId: string, input: unknown): Promise<TimesheetResource>
 }

@@ -112,13 +112,17 @@ export class ProjectFiles {
   }
 
   /** A new note for today's meeting, numbered when one of the same name exists. */
-  async createMeeting(projectPath: string, title: string): Promise<TFile> {
+  async createMeeting(
+    projectPath: string,
+    title: string,
+    opts: { date?: string; content?: string } = {}
+  ): Promise<TFile> {
     const folder = this.meetingsFolder(projectPath)
     await ensureFolder(this.app, folder)
-    const base = sanitizeFileName(meetingFileName(today().toString(), title))
+    const base = sanitizeFileName(meetingFileName(opts.date ?? today().toString(), title))
     let path = normalizePath(`${folder}/${base}.md`)
     for (let n = 2; this.app.vault.getAbstractFileByPath(path); n++) path = normalizePath(`${folder}/${base} ${n}.md`)
-    return this.app.vault.create(path, '')
+    return this.app.vault.create(path, opts.content ?? '')
   }
 
   /** Adds the entry as the last row of the timesheet, creating the timesheet if needed. */

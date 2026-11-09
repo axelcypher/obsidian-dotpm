@@ -111,11 +111,21 @@ const PARTICIPANT_COLUMNS: Record<keyof Participant, string[]> = {
   phone: ['telefon', 'phone', 'tel', 'mobil', 'handy']
 }
 
+function participantColumns(): Record<keyof Participant, string[]> {
+  return withHeadings(PARTICIPANT_COLUMNS, {
+    name: t('participants.name'),
+    role: t('participants.role'),
+    company: t('participants.company'),
+    email: t('participants.email'),
+    phone: t('participants.phone')
+  })
+}
+
 /** The participants in the note's first table, matched to its columns by their headings. */
 export function parseParticipants(markdown: string): Participant[] {
   const table = parseMarkdownTable(markdown)
   if (!table) return []
-  const columns = columnIndexes(table.header, PARTICIPANT_COLUMNS)
+  const columns = columnIndexes(table.header, participantColumns())
   if (columns.name < 0) columns.name = 0
   return table.rows
     .map((row) => ({
@@ -164,8 +174,24 @@ export interface TimesheetEntry {
 const TIMESHEET_COLUMNS: Record<keyof TimesheetEntry, string[]> = {
   date: ['datum', 'date', 'tag'],
   hours: ['stunden', 'hours', 'dauer', 'duration', 'std', 'zeit', 'h'],
-  person: ['bearbeiter', 'person', 'wer', 'mitarbeiter', 'who'],
+  person: ['bearbeiter', 'booked by', 'person', 'wer', 'mitarbeiter', 'who'],
   activity: ['tätigkeit', 'taetigkeit', 'activity', 'beschreibung', 'leistung', 'description', 'was', 'notiz']
+}
+
+/** The names a column is found by, the heading the template writes in the active language first. */
+function withHeadings<K extends string>(names: Record<K, string[]>, headings: Record<K, string>): Record<K, string[]> {
+  const out = {} as Record<K, string[]>
+  for (const key of Object.keys(names) as K[]) out[key] = [normalizeHeader(headings[key]), ...names[key]]
+  return out
+}
+
+function timesheetColumns(): Record<keyof TimesheetEntry, string[]> {
+  return withHeadings(TIMESHEET_COLUMNS, {
+    date: t('timesheet.date'),
+    hours: t('timesheet.hours'),
+    person: t('timesheet.person'),
+    activity: t('timesheet.activity')
+  })
 }
 
 /** Hours as typed: `2,5`, `2.5`, `2:30` or `2,5 h`. Null for anything else. */
@@ -194,7 +220,7 @@ function isoDate(text: string): string {
 export function parseTimesheet(markdown: string): TimesheetEntry[] {
   const table = parseMarkdownTable(markdown)
   if (!table) return []
-  const columns = columnIndexes(table.header, TIMESHEET_COLUMNS)
+  const columns = columnIndexes(table.header, timesheetColumns())
   // A table whose headings name none of the columns is read in the order the template writes them.
   if (Object.values(columns).every((index) => index < 0)) {
     Object.assign(columns, { date: 0, hours: 1, person: 2, activity: 3 })
@@ -228,32 +254,55 @@ export function timesheetTemplate(): string {
  * order. A note without a table gets one at its end.
  */
 export function appendTimesheetEntry(markdown: string, entry: TimesheetEntry, localeTag: string): string {
-  const values: Record<keyof TimesheetEntry, string> = {
+  return appendTableRow(markdown, timesheetColumns(), timesheetTemplate, {
     date: entry.date,
     hours: formatHours(entry.hours, localeTag),
     person: entry.person,
     activity: entry.activity
-  }
+  })
+}
+
+/**
+ * The note with the values as a new last row of its first table, each under the column
+ * its heading names; a table whose headings name none of them takes the values in the
+ * order given. A note without a table gets one from `template` at its end, and an empty
+ * row a template left is filled rather than kept above the new one.
+ */
+function appendTableRow<K extends string>(
+  markdown: string,
+  names: Record<K, string[]>,
+  template: () => string,
+  values: Record<K, string>
+): string {
+  const order = Object.keys(values) as K[]
   const text = markdown.replace(/\r\n/g, '\n')
   const table = parseMarkdownTable(text)
   if (!table) {
-    const row = tableLine([values.date, values.hours, values.person, values.activity])
     const lead = text.trim() ? `${text.replace(/\n*$/, '')}\n\n` : ''
-    return `${lead}${timesheetTemplate()}${row}\n`
+    return `${lead}${template().replace(/\n?(\|[ |]*\|)?\n?$/, '\n')}${tableLine(order.map((key) => values[key]))}\n`
   }
-  const columns = columnIndexes(table.header, TIMESHEET_COLUMNS)
-  const known = Object.values(columns).some((index) => index >= 0)
-  const order: (keyof TimesheetEntry)[] = ['date', 'hours', 'person', 'activity']
+  const columns = columnIndexes(table.header, names)
+  const known = Object.values<number>(columns).some((index) => index >= 0)
   const cells = table.header.map((_, index) => {
     const key = known ? order.find((column) => columns[column] === index) : order[index]
     return key ? values[key] : ''
   })
   const lines = text.split('\n')
-  // A template's empty row would otherwise sit above every entry.
   const last = lines[table.end - 1]
   const lastIsEmpty = table.rows.length > 0 && tableCells(last).every((cell) => !cell)
   lines.splice(lastIsEmpty ? table.end - 1 : table.end, lastIsEmpty ? 1 : 0, tableLine(cells))
   return lines.join('\n')
+}
+
+/** The participants note with the person as a new last row of its table. */
+export function appendParticipant(markdown: string, participant: Participant): string {
+  return appendTableRow(markdown, participantColumns(), participantsTemplate, {
+    name: participant.name,
+    role: participant.role,
+    company: participant.company,
+    email: participant.email,
+    phone: participant.phone
+  })
 }
 
 export interface TimesheetSummary {
@@ -277,6 +326,13 @@ export function summarizeTimesheet(entries: readonly TimesheetEntry[]): Timeshee
 
 // ---------------------------------------------------------------------------------------
 // Meetings
+
+const FRONTMATTER = /^---\r?\n[\s\S]*?\r?\n---(\r?\n|$)/
+
+/** A note's Markdown without its properties, trimmed. */
+export function noteBody(markdown: string): string {
+  return markdown.replace(FRONTMATTER, '').trim()
+}
 
 const MEETING_DATE = /^(\d{4}-\d{2}-\d{2})\b\s*/
 

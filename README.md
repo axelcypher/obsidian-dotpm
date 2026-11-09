@@ -21,6 +21,7 @@
 - **More columns:** status, type and tags are columns of the project list that the *Fields* menu shows, hides and reorders like the others.
 - **Project files:** each project keeps a folder of meeting notes, a participants note, a project data note and a timesheet in its own folder. The project overview shows the meetings as running text between description and milestones, and the data, participants and booked hours in its side column.
 - **Project data in Excel:** each project's data note is kept in step with a spreadsheet (`.xlsx`) both ways, in the project folder outside the vault (for example on a network drive) or beside the note.
+- **Local API and MCP:** project status and types, project data, participants, meetings and the timesheet can be read and written over HTTP and MCP too (`set_project_status`, `get_project_data`, `log_time` …), see [docs/api.md](docs/api.md).
 - **Quick time entries:** *Log time* (command, project overview, project context menu) books date, hours, person and activity into the project's timesheet in one dialog.
 - **Plugin identity:** own plugin ID `axlc-dotpm-revamped` and name *dotpm (Revamped)*.
 - **Release workflow:** streamlined build & release workflow shared with my other revamps (upstream CI, CodeQL, package publishing and issue templates were removed). Builds run with pnpm on Node 24, also on Windows.

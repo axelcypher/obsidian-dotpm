@@ -175,6 +175,46 @@ describe('createRouter', () => {
     expect(await res.text()).toContain('"id":4')
   })
 
+  it('serves project status, types, data, participants, meetings and timesheet', async () => {
+    expect((await json('PUT', '/v1/projects/p1/status', { body: { status: 'active' } })).body).toMatchObject({
+      status: 'active'
+    })
+    expect((await json('PUT', '/v1/projects/p1/status', { body: { status: 'nope' } })).status).toBe(400)
+    expect((await json('PUT', '/v1/projects/p1/status', { body: { status: null } })).body).toMatchObject({
+      status: null
+    })
+    expect((await json('PUT', '/v1/projects/p1/status', { body: { status: 3 } })).body).toEqual({
+      error: { code: 'invalid', message: 'status must be a status id or null' }
+    })
+    expect((await json('PUT', '/v1/projects/p1/types', { body: { types: ['conversion'] } })).body).toMatchObject({
+      types: ['conversion']
+    })
+    expect(
+      (await json('PATCH', '/v1/projects/p1/data', { body: { values: { 'bauherr-ort': 'Welver' } } })).body
+    ).toMatchObject({
+      rows: [{ key: 'bauherr-ort', value: 'Welver' }]
+    })
+    expect((await json('GET', '/v1/projects/p1/data')).body).toMatchObject({ projectId: 'p1' })
+    expect(
+      (await json('PATCH', '/v1/projects/p1/data', { body: { values: { 'bauherr-ort': null } } })).body
+    ).toMatchObject({
+      rows: [{ key: 'bauherr-ort', value: null }]
+    })
+    expect((await json('POST', '/v1/projects/p1/participants', { body: { name: 'Anna' } })).status).toBe(201)
+    expect((await json('GET', '/v1/projects/p1/participants')).body).toEqual([
+      { name: 'Anna', role: '', company: '', email: '', phone: '' }
+    ])
+    expect((await json('POST', '/v1/projects/p1/meetings', { body: { title: 'Abgleich' } })).status).toBe(201)
+    expect((await json('GET', '/v1/projects/p1/meetings')).body).toHaveLength(1)
+    expect(
+      (await json('POST', '/v1/projects/p1/timesheet', { body: { hours: 1.5, date: '2026-11-09' } })).body
+    ).toMatchObject({
+      total: 1.5
+    })
+    expect((await json('POST', '/v1/projects/p1/timesheet', { body: { hours: 'viel' } })).status).toBe(400)
+    expect((await json('GET', '/v1/projects/nope/timesheet')).status).toBe(404)
+  })
+
   it('needs the token for MCP too', async () => {
     const res = await route(
       new Request('http://127.0.0.1/mcp', { method: 'POST', body: JSON.stringify({ jsonrpc: '2.0', id: 1 }) })

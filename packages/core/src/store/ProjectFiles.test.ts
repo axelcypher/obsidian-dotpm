@@ -1,6 +1,7 @@
 import { afterEach, describe, expect, it } from 'vitest'
 import { setLocale } from '../i18n'
 import {
+  appendParticipant,
   appendTimesheetEntry,
   defaultProjectDataFields,
   defaultProjectFileNames,
@@ -78,6 +79,19 @@ describe('participants', () => {
     expect(filterParticipants(people, 'gmbh balkon').map((person) => person.name)).toEqual(['K. Eickhoff'])
     expect(filterParticipants(people, '  ')).toHaveLength(2)
     expect(filterParticipants(people, 'statik')).toEqual([])
+  })
+
+  it('adds a participant under the right headings, filling a template row', () => {
+    setLocale('de')
+    const person = { name: 'K. Eickhoff', role: 'Balkon', company: 'Eickhoff GmbH', email: 'info@eick.de', phone: '' }
+    const fromTemplate = appendParticipant(participantsTemplate(), person)
+    expect(fromTemplate).not.toContain('|  |  |')
+    expect(parseParticipants(fromTemplate)).toEqual([person])
+    const custom = '| Rolle | Name |\n| --- | --- |\n| Statik | Anna |\n'
+    expect(appendParticipant(custom, person)).toBe(
+      '| Rolle | Name |\n| --- | --- |\n| Statik | Anna |\n| Balkon | K. Eickhoff |\n'
+    )
+    expect(parseParticipants(appendParticipant('', person))).toEqual([person])
   })
 
   it('takes the first column as the name when no heading says so', () => {

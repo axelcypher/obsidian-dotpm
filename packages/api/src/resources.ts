@@ -1,8 +1,17 @@
-import type { Project, ResolvedProjectConfig, Task } from '@dotpm/core'
-import { HEX_COLOR, makeTask, parsePlainDate } from '@dotpm/core'
+import type {
+  Participant,
+  Project,
+  ProjectDataValue,
+  ProjectLabelConfig,
+  ResolvedProjectConfig,
+  Task
+} from '@dotpm/core'
+import { HEX_COLOR, isValidDataKey, makeTask, parsePlainDate } from '@dotpm/core'
 import * as v from 'valibot'
 import {
   ApiRequestError,
+  type MeetingCreate,
+  type TimeEntryCreate,
   type ProjectCreate,
   type ProjectResource,
   type ProjectSummary,
@@ -81,10 +90,17 @@ export function taskResources(project: Project, projectId: string, includeArchiv
   return out
 }
 
+/** The presets a project's status and types are picked from, which only the host knows. */
+export interface ProjectLabelPresets {
+  projectStatuses: readonly ProjectLabelConfig[]
+  projectTypes: readonly ProjectLabelConfig[]
+}
+
 export function toProjectResource(
   project: Project,
   config: ResolvedProjectConfig,
-  summary: ProjectSummary
+  summary: ProjectSummary,
+  presets: ProjectLabelPresets = { projectStatuses: [], projectTypes: [] }
 ): ProjectResource {
   return {
     ...summary,
@@ -93,6 +109,8 @@ export function toProjectResource(
     customFields: config.customFields.map((field) => ({ ...field })),
     statuses: config.statuses.map((status) => ({ ...status })),
     priorities: config.priorities.map((priority) => ({ ...priority })),
+    projectStatuses: presets.projectStatuses.map((status) => ({ ...status })),
+    projectTypes: presets.projectTypes.map((type) => ({ ...type })),
     createdAt: project.createdAt,
     updatedAt: project.updatedAt
   }
@@ -269,6 +287,109 @@ export function parseProjectCreate(input: unknown): ProjectCreate {
 
 export function parseTaskMove(input: unknown): TaskMove {
   return parse(TASK_MOVE, input)
+}
+
+function requiredText(name: string, description: string): v.GenericSchema<string, string> {
+  return v.pipe(
+    v.string(`${name} must be a string`),
+    v.check((value) => value.trim() !== '', `${name} must not be empty`),
+    v.description(description)
+  )
+}
+
+export const PROJECT_STATUS_FIELDS = {
+  status: v.pipe(
+    v.nullable(v.string('status must be a status id or null')),
+    v.description('Id or label of one of the projectStatuses get_project lists, or null to clear')
+  )
+}
+
+export const PROJECT_TYPES_FIELDS = {
+  types: listField('types', 'Ids or labels of projectTypes from get_project; they replace the current ones')
+}
+
+const DATA_VALUE_MESSAGE = 'each value must be text, a number, true or false, or null'
+
+export const PROJECT_DATA_FIELDS = {
+  values: v.pipe(
+    v.record(
+      v.pipe(
+        v.string(),
+        v.check(isValidDataKey, 'property names start with a letter or digit and hold only letters, digits, - and _')
+      ),
+      v.nullable(v.union([v.string(), v.number(), v.boolean()], DATA_VALUE_MESSAGE)),
+      'values must be an object of property names to values'
+    ),
+    v.description('Property name to value, as get_project_data lists them by key; null empties a property')
+  )
+}
+
+export const PARTICIPANT_FIELDS = {
+  name: requiredText('name', 'Name of the person'),
+  role: v.optional(stringField('role', 'Their role on the project')),
+  company: v.optional(stringField('company', 'Company or institution')),
+  email: v.optional(stringField('email', 'Email address')),
+  phone: v.optional(stringField('phone', 'Phone number'))
+}
+
+export const MEETING_FIELDS = {
+  title: requiredText('title', 'Title of the meeting; the note is named "<date> <title>"'),
+  date: v.optional(dateField('date')),
+  content: v.optional(stringField('content', 'Markdown of the minutes'))
+}
+
+export const TIME_ENTRY_FIELDS = {
+  hours: v.pipe(
+    v.number('hours must be a number'),
+    v.check((hours) => hours > 0 && hours <= 24, 'hours must be more than 0 and at most 24'),
+    v.description('Hours worked, decimals allowed')
+  ),
+  date: v.optional(dateField('date')),
+  person: v.optional(stringField('person', 'Who did the work')),
+  activity: v.optional(stringField('activity', 'What was done'))
+}
+
+const PROJECT_STATUS = v.object(PROJECT_STATUS_FIELDS, missingKey('expected an object'))
+const PROJECT_TYPES = v.object(PROJECT_TYPES_FIELDS, missingKey('expected an object'))
+const PROJECT_DATA = v.object(PROJECT_DATA_FIELDS, missingKey('expected an object'))
+const PARTICIPANT = v.object(PARTICIPANT_FIELDS, missingKey('expected an object'))
+const MEETING = v.object(MEETING_FIELDS, missingKey('expected an object'))
+const TIME_ENTRY = v.object(TIME_ENTRY_FIELDS, missingKey('expected an object'))
+
+export function parseProjectStatus(input: unknown): string | null {
+  const status = parse(PROJECT_STATUS, input).status
+  return status === null || status.trim() === '' ? null : status.trim()
+}
+
+export function parseProjectTypes(input: unknown): string[] {
+  return parse(PROJECT_TYPES, input)
+    .types.map((type) => type.trim())
+    .filter(Boolean)
+}
+
+export function parseProjectDataWrite(input: unknown): Record<string, ProjectDataValue> {
+  return parse(PROJECT_DATA, input).values
+}
+
+export function parseParticipant(input: unknown): Participant {
+  const person = parse(PARTICIPANT, input)
+  return {
+    name: person.name.trim(),
+    role: person.role?.trim() ?? '',
+    company: person.company?.trim() ?? '',
+    email: person.email?.trim() ?? '',
+    phone: person.phone?.trim() ?? ''
+  }
+}
+
+export function parseMeetingCreate(input: unknown): MeetingCreate {
+  const meeting = parse(MEETING, input)
+  return { ...meeting, title: meeting.title.trim(), date: meeting.date || undefined }
+}
+
+export function parseTimeEntry(input: unknown): TimeEntryCreate {
+  const entry = parse(TIME_ENTRY, input)
+  return { ...entry, date: entry.date || undefined }
 }
 
 export function parseTaskSearch(input: unknown): TaskSearch {

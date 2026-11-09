@@ -39,11 +39,13 @@ Cursor, Claude Desktop and other clients that take a JSON config:
 
 A client that can only launch a command, or cannot send a header, can use `dotpm mcp` from the command line package instead. It bridges stdio to this endpoint and finds the token itself. See [cli.md](cli.md).
 
-Tools: `list_projects`, `get_project`, `archive_project`, `list_tasks`, `get_task`, `search_tasks`, `create_task`, `update_task`, `move_task`, `archive_task`, `delete_task`, `list_changes`.
+Tools: `list_projects`, `get_project`, `archive_project`, `create_project`, `list_tasks`, `get_task`, `search_tasks`, `create_task`, `update_task`, `move_task`, `archive_task`, `delete_task`, `list_changes`.
+
+Project status, types and files (revamp): `set_project_status`, `set_project_types`, `get_project_data`, `update_project_data`, `list_participants`, `add_participant`, `list_meetings`, `create_meeting`, `get_timesheet`, `log_time`.
 
 Resources: `dotpm://projects/{id}` (the project with its tasks) and `dotpm://tasks/{id}`.
 
-Read a project before writing tasks into it. Its `statuses` and `priorities` list the ids a task may carry, and a write with any other value is refused.
+Read a project before writing tasks into it. Its `statuses` and `priorities` list the ids a task may carry, and a write with any other value is refused. Likewise its `projectStatuses` and `projectTypes` list what `set_project_status` and `set_project_types` take, by id or label.
 
 [`skills/dotpm`](https://github.com/dotpm/cli/blob/main/skills/dotpm/SKILL.md) in the command line repository is a skill for agents that use these tools. Copy the folder into the agent's skills directory, `~/.claude/skills/` for Claude Code.
 
@@ -74,6 +76,18 @@ Send `Authorization: Bearer <token>` with every request except `GET /v1/health`.
 | `DELETE /v1/tasks/{id}` | Delete the task and its subtasks |
 | `GET /v1/search` | `q` (title text), `projectId`, `status`, `assignee`, `includeArchived`, `limit` (default 50) |
 | `GET /v1/changes?since=<cursor>` | What changed after a cursor, see below |
+| `PUT /v1/projects/{id}/status` | Body `{ "status": "<id or label>" }` or `{ "status": null }` to clear; answers with the project |
+| `PUT /v1/projects/{id}/types` | Body `{ "types": ["<id or label>", …] }`, replacing the current types; `[]` clears them |
+| `GET /v1/projects/{id}/data` | The project data note: `{ projectId, folder, rows }`, each row `{ group, label, key, value }`, the project folder first |
+| `PATCH /v1/projects/{id}/data` | Body `{ "values": { "<key>": <text, number, true/false or null> } }`; keys left out stay, null empties one; creates the note when needed |
+| `GET /v1/projects/{id}/participants` | `[{ name, role, company, email, phone }]` from the participants table |
+| `POST /v1/projects/{id}/participants` | Add a row from `name` and optional `role`, `company`, `email`, `phone`; answers `201` with everyone |
+| `GET /v1/projects/{id}/meetings` | Meeting notes newest first: `{ path, date, title, content }` |
+| `POST /v1/projects/{id}/meetings` | Create a meeting note from `title`, optional `date` (`YYYY-MM-DD`, today by default) and `content` (Markdown); answers `201` |
+| `GET /v1/projects/{id}/timesheet` | `{ projectId, entries, total, byPerson }`, each entry `{ date, hours, person, activity }` |
+| `POST /v1/projects/{id}/timesheet` | Book `hours` (more than 0, at most 24) with optional `date`, `person` (the one set in settings by default) and `activity`; answers `201` with the sheet |
+
+A project in a listing also carries `status` (a preset id, the value as written when no preset names it, or null) and `types` (ids). The project data note is kept in step with its spreadsheet; a write through the API reaches the spreadsheet like an edit in Obsidian.
 
 Fields a client may write: `title`, `description`, `type` (`task`, `milestone`, `subtask`), `status`, `priority`, `start`, `due` (`YYYY-MM-DD` or empty), `progress` (0 to 100), `assignees`, `tags`, `dependencies` (task ids), `recurrence` (`{ interval, every, endDate? }` or null), `timeEstimate` (hours or null), `customFields` (an object keyed by field id).
 

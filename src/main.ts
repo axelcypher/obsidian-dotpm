@@ -645,6 +645,11 @@ export default class PMPlugin extends Plugin {
     await this.writeProjectTypes(path, () => [])
   }
 
+  /** Replaces the project note's types with the ids given. */
+  async setProjectTypes(path: string, ids: string[]): Promise<void> {
+    await this.writeProjectTypes(path, () => ids)
+  }
+
   /** Works on the note's current values rather than the index's, so two quick toggles both land. */
   private async writeProjectTypes(path: string, change: (values: string[]) => string[]): Promise<void> {
     const file = this.app.vault.getAbstractFileByPath(path)

@@ -24,6 +24,7 @@ import {
 } from '@dotpm/api'
 import type PMPlugin from '#main'
 import { personColor, type ProjectScope } from '#store'
+import { projectLabelIds } from '#ui/projectLabels'
 
 export interface ExportViewState {
   mode: ViewMode
@@ -70,7 +71,8 @@ function summarize(plugin: PMPlugin, project: Project): ProjectSummary {
     parentId: plugin.index.parentOf(project.filePath)?.id ?? null,
     archived: plugin.index.isArchived(project.filePath),
     taskCount: live.length,
-    doneCount: live.filter((f) => complete.has(f.task.status)).length
+    doneCount: live.filter((f) => complete.has(f.task.status)).length,
+    ...projectLabelIds(plugin, plugin.index.projectRef(project.filePath) ?? { status: '', types: [] })
   }
 }
 

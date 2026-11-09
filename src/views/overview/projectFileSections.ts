@@ -6,6 +6,7 @@ import {
   locale,
   meetingDate,
   meetingTitle,
+  noteBody,
   parseParticipants,
   parseTimesheet,
   projectDataGroups,
@@ -21,7 +22,6 @@ const RECENT_ENTRIES = 3
 /** Characters after which a project data value folds to three lines. */
 const LONG_VALUE = 120
 
-const FRONTMATTER = /^---\r?\n[\s\S]*?\r?\n---(\r?\n|$)/
 const EMAIL = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
 
 export interface FileSectionContext {
@@ -62,12 +62,8 @@ function emptyState(
   link.addEventListener('click', safeAsync(create.onClick))
 }
 
-async function noteBody(plugin: PMPlugin, file: TFile): Promise<string> {
-  return (await plugin.app.vault.cachedRead(file)).replace(FRONTMATTER, '').trim()
-}
-
 async function renderNote(ctx: FileSectionContext, file: TFile, host: HTMLElement): Promise<void> {
-  const body = await noteBody(ctx.plugin, file)
+  const body = noteBody(await ctx.plugin.app.vault.cachedRead(file))
   if (!host.isConnected) return
   host.empty()
   if (!body) {

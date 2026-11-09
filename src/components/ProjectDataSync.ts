@@ -200,7 +200,8 @@ export class ProjectDataSync {
     )
   }
 
-  private rows(frontmatter: Record<string, unknown>): ProjectDataRow[] {
+  /** The data note's properties as sheet rows: the project folder, every field, then the rest. */
+  rows(frontmatter: Record<string, unknown>): ProjectDataRow[] {
     const { settings } = this.plugin
     return projectDataRows(
       settings.projectDataFields,

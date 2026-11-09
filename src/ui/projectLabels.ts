@@ -81,3 +81,15 @@ export function openProjectTypeMenu(plugin: PMPlugin, path: string, e: MouseEven
   addProjectTypeItems(menu, plugin, path)
   menu.showAtMouseEvent(e)
 }
+
+/** A project's status and types as preset ids, the way clients of the local API read them. */
+export function projectLabelIds(
+  plugin: PMPlugin,
+  ref: { status: string; types: string[] }
+): { status: string | null; types: string[] } {
+  const { projectStatuses, projectTypes } = plugin.settings
+  return {
+    status: ref.status ? (resolveProjectLabel(projectStatuses, ref.status)?.id ?? ref.status) : null,
+    types: ref.types.map((raw) => resolveProjectLabel(projectTypes, raw)?.id ?? raw)
+  }
+}

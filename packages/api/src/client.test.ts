@@ -28,6 +28,17 @@ describe('HttpApi', () => {
     })
   })
 
+  it('reaches project labels and files over HTTP', async () => {
+    expect((await api.setProjectStatus('p1', { status: 'planned' })).status).toBe('planned')
+    expect((await api.setProjectTypes('p1', { types: ['extension'] })).types).toEqual(['extension'])
+    expect((await api.updateProjectData('p1', { values: { 'projekt-code': 'BS5' } })).rows).toHaveLength(1)
+    expect(await api.addParticipant('p1', { name: 'Anna' })).toHaveLength(1)
+    expect((await api.createMeeting('p1', { title: 'Abgleich' })).title).toBe('Abgleich')
+    expect((await api.logTime('p1', { hours: 3 })).total).toBe(3)
+    expect((await api.getTimesheet('p1')).entries).toHaveLength(1)
+    await expect(api.setProjectStatus('p1', { status: 'someday' })).rejects.toMatchObject({ code: 'invalid' })
+  })
+
   it('reads health, projects and tasks', async () => {
     expect(await api.health()).toEqual({ ok: true, name: 'dotpm', version: '9.9.9' })
     expect((await api.listProjects()).map((p) => p.id)).toEqual(['p1'])

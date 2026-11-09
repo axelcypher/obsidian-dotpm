@@ -139,6 +139,38 @@ export function createRouter(host: HttpHost): (request: Request) => Response | P
     return c.json(await c.var.api.archiveTask(c.req.param('id'), asked.archived !== false))
   })
 
+  app.put('/v1/projects/:id/status', async (c) =>
+    c.json(await c.var.api.setProjectStatus(c.req.param('id'), await body(c)))
+  )
+
+  app.put('/v1/projects/:id/types', async (c) =>
+    c.json(await c.var.api.setProjectTypes(c.req.param('id'), await body(c)))
+  )
+
+  app.get('/v1/projects/:id/data', async (c) => c.json(await c.var.api.getProjectData(c.req.param('id'))))
+
+  app.patch('/v1/projects/:id/data', async (c) =>
+    c.json(await c.var.api.updateProjectData(c.req.param('id'), await body(c)))
+  )
+
+  app.get('/v1/projects/:id/participants', async (c) => c.json(await c.var.api.listParticipants(c.req.param('id'))))
+
+  app.post('/v1/projects/:id/participants', async (c) =>
+    c.json(await c.var.api.addParticipant(c.req.param('id'), await body(c)), 201)
+  )
+
+  app.get('/v1/projects/:id/meetings', async (c) => c.json(await c.var.api.listMeetings(c.req.param('id'))))
+
+  app.post('/v1/projects/:id/meetings', async (c) =>
+    c.json(await c.var.api.createMeeting(c.req.param('id'), await body(c)), 201)
+  )
+
+  app.get('/v1/projects/:id/timesheet', async (c) => c.json(await c.var.api.getTimesheet(c.req.param('id'))))
+
+  app.post('/v1/projects/:id/timesheet', async (c) =>
+    c.json(await c.var.api.logTime(c.req.param('id'), await body(c)), 201)
+  )
+
   app.get('/v1/search', async (c) => c.json(await c.var.api.searchTasks(parseTaskSearch(search(c)))))
 
   app.get('/v1/changes', async (c) => {

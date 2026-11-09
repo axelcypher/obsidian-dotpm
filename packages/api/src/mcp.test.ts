@@ -69,6 +69,16 @@ describe('createMcpHandler', () => {
       'move_task',
       'archive_task',
       'delete_task',
+      'set_project_status',
+      'set_project_types',
+      'get_project_data',
+      'update_project_data',
+      'list_participants',
+      'add_participant',
+      'list_meetings',
+      'create_meeting',
+      'get_timesheet',
+      'log_time',
       'list_changes'
     ])
     expect(listed[1].inputSchema).toMatchObject({ required: ['projectId'] })
@@ -157,6 +167,55 @@ describe('createMcpHandler', () => {
       id: 'p1',
       tasks: [expect.objectContaining({ id: 't1' }), expect.objectContaining({ id: 't2' })]
     })
+  })
+
+  it('sets a project status and types by label, and refuses an unknown one', async () => {
+    expect(parsed(await call('set_project_status', { projectId: 'p1', status: 'On hold' }))).toMatchObject({
+      status: 'on-hold',
+      projectStatuses: expect.arrayContaining([expect.objectContaining({ id: 'active' })])
+    })
+    const refused = await call('set_project_status', { projectId: 'p1', status: 'someday' })
+    expect(refused.result).toMatchObject({ isError: true })
+    expect(
+      parsed(await call('set_project_types', { projectId: 'p1', types: ['Conversion', 'listed-building'] }))
+    ).toMatchObject({
+      types: ['conversion', 'listed-building']
+    })
+    expect(api.calls).toContain('setProjectStatus p1 On hold')
+  })
+
+  it('reads and writes project data, participants, meetings and the timesheet', async () => {
+    expect(
+      parsed(
+        await call('update_project_data', { projectId: 'p1', values: { 'bauherr-name': 'Jonas', 'bplan-grz': 0.4 } })
+      )
+    ).toMatchObject({
+      rows: [
+        { key: 'bauherr-name', value: 'Jonas' },
+        { key: 'bplan-grz', value: 0.4 }
+      ]
+    })
+    const badKey = await call('update_project_data', { projectId: 'p1', values: { 'a: b': 'x' } })
+    expect(badKey.error?.message ?? JSON.stringify(badKey.result)).toContain('property names')
+    expect(parsed(await call('add_participant', { projectId: 'p1', name: 'Anna', role: 'Statik' }))).toEqual([
+      { name: 'Anna', role: 'Statik', company: '', email: '', phone: '' }
+    ])
+    expect(
+      parsed(
+        await call('create_meeting', { projectId: 'p1', title: 'Abgleich', date: '2026-11-09', content: '- Dach' })
+      )
+    ).toMatchObject({
+      date: '2026-11-09',
+      title: 'Abgleich',
+      content: '- Dach'
+    })
+    expect(parsed(await call('list_meetings', { projectId: 'p1' }))).toHaveLength(1)
+    expect(parsed(await call('log_time', { projectId: 'p1', hours: 2.5, person: 'Tobias' }))).toMatchObject({
+      total: 2.5,
+      byPerson: [{ person: 'Tobias', hours: 2.5 }]
+    })
+    const noHours = await call('log_time', { projectId: 'p1', hours: 0 })
+    expect(noHours.error?.message ?? JSON.stringify(noHours.result)).toContain('hours must be more than 0')
   })
 
   it('answers a notification with 202 and no body', async () => {

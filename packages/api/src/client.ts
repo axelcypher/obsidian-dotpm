@@ -1,13 +1,17 @@
+import type { Participant } from '@dotpm/core'
 import {
   ApiRequestError,
   ERROR_STATUS,
   type ApiErrorCode,
   type ChangePage,
   type DomainApi,
+  type MeetingResource,
+  type ProjectDataResource,
   type ProjectResource,
   type ProjectSummary,
   type TaskResource,
-  type TaskSearch
+  type TaskSearch,
+  type TimesheetResource
 } from './contract'
 
 export interface HttpApiOptions {
@@ -127,6 +131,46 @@ export class HttpApi implements DomainApi {
 
   changes(since: number | null): Promise<ChangePage> {
     return this.request('GET', `/v1/changes${since === null ? '' : `?since=${since}`}`)
+  }
+
+  setProjectStatus(projectId: string, input: unknown): Promise<ProjectResource> {
+    return this.request('PUT', `/v1/projects/${id(projectId)}/status`, input)
+  }
+
+  setProjectTypes(projectId: string, input: unknown): Promise<ProjectResource> {
+    return this.request('PUT', `/v1/projects/${id(projectId)}/types`, input)
+  }
+
+  getProjectData(projectId: string): Promise<ProjectDataResource> {
+    return this.request('GET', `/v1/projects/${id(projectId)}/data`)
+  }
+
+  updateProjectData(projectId: string, input: unknown): Promise<ProjectDataResource> {
+    return this.request('PATCH', `/v1/projects/${id(projectId)}/data`, input)
+  }
+
+  listParticipants(projectId: string): Promise<Participant[]> {
+    return this.request('GET', `/v1/projects/${id(projectId)}/participants`)
+  }
+
+  addParticipant(projectId: string, input: unknown): Promise<Participant[]> {
+    return this.request('POST', `/v1/projects/${id(projectId)}/participants`, input)
+  }
+
+  listMeetings(projectId: string): Promise<MeetingResource[]> {
+    return this.request('GET', `/v1/projects/${id(projectId)}/meetings`)
+  }
+
+  createMeeting(projectId: string, input: unknown): Promise<MeetingResource> {
+    return this.request('POST', `/v1/projects/${id(projectId)}/meetings`, input)
+  }
+
+  getTimesheet(projectId: string): Promise<TimesheetResource> {
+    return this.request('GET', `/v1/projects/${id(projectId)}/timesheet`)
+  }
+
+  logTime(projectId: string, input: unknown): Promise<TimesheetResource> {
+    return this.request('POST', `/v1/projects/${id(projectId)}/timesheet`, input)
   }
 
   private async request<T>(

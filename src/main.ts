@@ -4,6 +4,7 @@ import {
   DEFAULT_SETTINGS,
   defaultPriorities,
   defaultProjectStatuses,
+  defaultProjectTypes,
   defaultStatuses,
   makeDefaultFilter,
   makeDefaultGroup,
@@ -18,8 +19,11 @@ import {
   dedupePeople,
   displayName,
   localApiPortFor,
+  projectLabelValues,
   projectStatusProperty,
+  projectTypeProperty,
   readColor,
+  toggleProjectLabel,
   compareVersions,
   releaseNotesSince,
   setDateFormat,
@@ -424,6 +428,7 @@ export default class PMPlugin extends Plugin {
     if (!saved?.priorities?.length) this.settings.priorities = defaultPriorities()
     // Unlike task statuses, a vault may clear its project statuses on purpose.
     if (!Array.isArray(saved?.projectStatuses)) this.settings.projectStatuses = defaultProjectStatuses()
+    if (!Array.isArray(saved?.projectTypes)) this.settings.projectTypes = defaultProjectTypes()
     if (!this.settings.projectFilters) this.settings.projectFilters = {}
     if (!this.settings.scopeViews) this.settings.scopeViews = {}
     if (!this.settings.collapsedTasks) this.settings.collapsedTasks = {}
@@ -570,6 +575,27 @@ export default class PMPlugin extends Plugin {
     const key = projectStatusProperty(this.settings)
     await this.app.fileManager.processFrontMatter(file, (frontmatter: Record<string, unknown>) => {
       if (status) frontmatter[key] = status
+      else Reflect.deleteProperty(frontmatter, key)
+    })
+  }
+
+  /** Adds the type to the project note's types, or takes it out when the note already has it. */
+  async toggleProjectType(path: string, id: string): Promise<void> {
+    await this.writeProjectTypes(path, (values) => toggleProjectLabel(this.settings.projectTypes, values, id))
+  }
+
+  async clearProjectTypes(path: string): Promise<void> {
+    await this.writeProjectTypes(path, () => [])
+  }
+
+  /** Works on the note's current values rather than the index's, so two quick toggles both land. */
+  private async writeProjectTypes(path: string, change: (values: string[]) => string[]): Promise<void> {
+    const file = this.app.vault.getAbstractFileByPath(path)
+    if (!(file instanceof TFile)) return
+    const key = projectTypeProperty(this.settings)
+    await this.app.fileManager.processFrontMatter(file, (frontmatter: Record<string, unknown>) => {
+      const next = change(projectLabelValues(frontmatter[key]))
+      if (next.length) frontmatter[key] = next
       else Reflect.deleteProperty(frontmatter, key)
     })
   }

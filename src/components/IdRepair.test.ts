@@ -43,6 +43,7 @@ function projectRef(id: string, path: string): ProjectRef {
     parentPath: undefined,
     archived: false,
     status: '',
+    types: [],
     ownStatusIds: null,
     completeStatusIds: null,
     autoArchiveDays: null

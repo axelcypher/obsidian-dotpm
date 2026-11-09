@@ -213,7 +213,7 @@ export interface ProjectListFilter {
 export type ProjectGroupBy = 'none' | 'folder' | 'tag' | 'status'
 
 /** The project list's columns after the title, in their default order. */
-export const PROJECT_LIST_FIELDS = ['status', 'progress', 'tasks', 'members', 'due'] as const
+export const PROJECT_LIST_FIELDS = ['status', 'types', 'progress', 'tasks', 'members', 'due', 'tags'] as const
 export type ProjectListField = (typeof PROJECT_LIST_FIELDS)[number]
 
 /** What the project list shows. Archived projects follow `PMSettings.showArchivedProjects`. */
@@ -282,16 +282,20 @@ export interface StatusConfig {
   complete: boolean
 }
 
-/**
- * A status a whole project can be in, kept in the project note's properties. Its place in
- * `PMSettings.projectStatuses` is its place in the project list.
- */
-export interface ProjectStatusConfig {
+/** A label from a vault-wide preset list that a project note carries in its properties. */
+export interface ProjectLabelConfig {
+  /** The value written into project notes. */
   id: string
   label: string
   color: string
   icon: string
 }
+
+/** A status a whole project can be in. Its place in `PMSettings.projectStatuses` is its place in the project list. */
+export type ProjectStatusConfig = ProjectLabelConfig
+
+/** What a project is about, such as a conversion or a listed building. A project can have several. */
+export type ProjectTypeConfig = ProjectLabelConfig
 
 /** Overrides a project may set in its own file. An absent field falls back to the global settings. */
 export interface ProjectConfig {
@@ -372,6 +376,10 @@ export interface PMSettings {
   projectStatusProperty: string
   /** Whether the project list puts projects in status order before applying its own sort. */
   sortProjectsByStatus: boolean
+  /** The types a project can be marked with, in the order menus list them. May be empty. */
+  projectTypes: ProjectTypeConfig[]
+  /** The project note property holding its types. Empty falls back to `DEFAULT_PROJECT_TYPE_PROPERTY`. */
+  projectTypeProperty: string
   /** Icons for priorities that don't carry their own. */
   priorityIcons: PriorityIconSet
   /** Task properties every project starts with. A project adds to these, or overrides one by id. */
@@ -438,6 +446,17 @@ export const DEFAULT_PROJECT_STATUSES: ProjectStatusConfig[] = [
 
 export const DEFAULT_PROJECT_STATUS_PROPERTY = 'status'
 
+export const DEFAULT_PROJECT_TYPES: ProjectTypeConfig[] = [
+  { id: 'new-build', label: 'New build', color: '#6f95c4', icon: '' },
+  { id: 'conversion', label: 'Conversion', color: '#b8a06b', icon: '' },
+  { id: 'extension', label: 'Extension', color: '#79b58d', icon: '' },
+  { id: 'existing-building', label: 'Existing building', color: '#8b72be', icon: '' },
+  { id: 'listed-building', label: 'Listed building', color: '#c47070', icon: '' }
+]
+
+/** Not `type`, which many vaults already use to say what kind of note a note is. */
+export const DEFAULT_PROJECT_TYPE_PROPERTY = 'projectType'
+
 export const DEFAULT_PRIORITIES: PriorityConfig[] = [
   { id: 'critical', label: 'Critical', color: '#c47070', icon: '' },
   { id: 'high', label: 'High', color: '#b8a06b', icon: '' },
@@ -499,6 +518,8 @@ export const DEFAULT_SETTINGS: PMSettings = {
   projectStatuses: DEFAULT_PROJECT_STATUSES,
   projectStatusProperty: DEFAULT_PROJECT_STATUS_PROPERTY,
   sortProjectsByStatus: true,
+  projectTypes: DEFAULT_PROJECT_TYPES,
+  projectTypeProperty: DEFAULT_PROJECT_TYPE_PROPERTY,
   priorityIcons: 'chevrons',
   customFields: [],
   globalTeamMembers: [],

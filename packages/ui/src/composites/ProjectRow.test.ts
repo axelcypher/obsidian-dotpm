@@ -52,7 +52,7 @@ describe('ProjectRow status', () => {
   it('offers an empty chip without a status', () => {
     const project = row({ status: null })
     expect(project.el.hasClass('pm-project-row--status')).toBe(false)
-    expect(statusChip(project)?.hasClass('pm-project-status--empty')).toBe(true)
+    expect(statusChip(project)?.hasClass('pm-project-label--empty')).toBe(true)
   })
 
   it('opens the status picker from the chip without opening the project', () => {
@@ -70,5 +70,47 @@ describe('ProjectRow status', () => {
     const project = row({ fields: ['progress'], status: { label: 'Done', color: '#8a94a0', icon: '', preset: true } })
     expect(statusChip(project)).toBeNull()
     expect(project.el.hasClass('pm-project-row--status')).toBe(true)
+  })
+})
+
+describe('ProjectRow types and tags', () => {
+  const conversion = { label: 'Conversion', color: '#b8a06b', icon: '', preset: true }
+  const listed = { label: 'Listed building', color: '#c47070', icon: '', preset: true }
+  const typeChips = (project: ProjectRow): HTMLElement[] =>
+    Array.from(project.el.querySelectorAll<HTMLElement>('.pm-table-cell-project-types .pm-chip'))
+
+  it('shows one colored chip per type, without a dot, and leaves the row untinted', () => {
+    const project = row({ fields: ['types'], types: [conversion, listed] })
+    expect(typeChips(project).map((chip) => chip.textContent)).toEqual(['Conversion', 'Listed building'])
+    expect(typeChips(project)[0].style.getPropertyValue('--pm-chip-color')).toBe('#b8a06b')
+    expect(typeChips(project)[0].find('.pm-chip-dot')).toBeNull()
+    expect(project.el.hasClass('pm-project-row--status')).toBe(false)
+  })
+
+  it('offers an empty chip without types, and opens the picker from any chip without opening the project', () => {
+    const onTypes = vi.fn<(e: MouseEvent) => void>()
+    const onClick = vi.fn<() => void>()
+    const empty = row({ fields: ['types'], onTypes, onClick })
+    expect(typeChips(empty)[0].hasClass('pm-project-label--empty')).toBe(true)
+    typeChips(empty)[0].click()
+    const typed = row({ fields: ['types'], types: [conversion, listed], onTypes, onClick })
+    typeChips(typed)[1].click()
+    expect(onTypes).toHaveBeenCalledTimes(2)
+    expect(onClick).not.toHaveBeenCalled()
+  })
+
+  it('lists the first tags and counts the rest', () => {
+    const project = row({ fields: ['tags'], tags: ['client', 'web', 'q4', 'urgent', 'later'], showTagColors: false })
+    const cell = project.el.find('.pm-table-cell-project-tags')
+    expect(Array.from(cell?.querySelectorAll('.pm-chip') ?? []).map((chip) => chip.textContent)).toEqual([
+      'client',
+      'web',
+      'q4'
+    ])
+    expect(cell?.textContent).toContain('+2')
+  })
+
+  it('shows a dash without tags', () => {
+    expect(row({ fields: ['tags'] }).el.find('.pm-table-cell-project-tags')?.textContent).toBe('—')
   })
 })

@@ -15,7 +15,7 @@ import {
   dateUrgency,
   dedupePeople,
   isTerminalStatus,
-  projectStatusRank,
+  projectLabelRank,
   t,
   tn
 } from '@dotpm/core'
@@ -35,9 +35,10 @@ import {
   renderTagChip,
   renderTimeChip,
   renderGlyph,
-  renderProjectStatusChip
+  renderProjectStatusChip,
+  renderProjectTypeChips
 } from '@dotpm/ui'
-import { openProjectStatusMenu, projectRowStatus } from '#ui/projectStatus'
+import { openProjectStatusMenu, openProjectTypeMenu, projectRowStatus, projectRowTypes } from '#ui/projectLabels'
 import { linkedRefs } from './linkedRefs'
 
 export const PM_PROJECT_OVERVIEW_VIEW_TYPE = 'pm-project-overview'
@@ -170,13 +171,14 @@ export class ProjectOverviewView extends ItemView {
     this.renderProperties(side, project, tasks, rollup)
   }
 
-  /** Statuses are part of it: they live in the notes' properties, which only the index sees change. */
+  /** Statuses and types are part of it: they live in the notes' properties, which only the index sees change. */
   private signTree(project: Project): string {
     const { index } = this.plugin
     const parent = index.parentOf(project.filePath)?.path ?? ''
     const archived = index.isArchived(project.filePath) ? 'archived' : ''
-    const status = index.projectRef(project.filePath)?.status ?? ''
-    return `${parent}|${archived}|${status}|${this.children(project)
+    const ref = index.projectRef(project.filePath)
+    const labels = `${ref?.status ?? ''}|${ref?.types.join('+') ?? ''}`
+    return `${parent}|${archived}|${labels}|${this.children(project)
       .map((child) => `${child.path}=${child.status}`)
       .join(',')}`
   }
@@ -187,7 +189,7 @@ export class ProjectOverviewView extends ItemView {
     const archived = index.isArchived(project.filePath)
     const children = index.childRefs(project.filePath, archived || settings.showArchivedProjects)
     if (!settings.sortProjectsByStatus) return children
-    const rank = (ref: ProjectRef): number => projectStatusRank(settings.projectStatuses, ref.status)
+    const rank = (ref: ProjectRef): number => projectLabelRank(settings.projectStatuses, ref.status)
     return children.sort((a, b) => rank(a) - rank(b))
   }
 
@@ -425,6 +427,15 @@ export class ProjectOverviewView extends ItemView {
         if (person.onClick) avatar.onClick(person.onClick)
         holder.createSpan({ text: person.name })
       }
+    }
+
+    const types = projectRowTypes(this.plugin, project.filePath)
+    if (types.length || this.plugin.settings.projectTypes.length) {
+      renderPropRow(list, t('columns.projectTypes'), () => {
+        const value = createDiv('pm-prop-value')
+        renderProjectTypeChips(value, types, (e) => openProjectTypeMenu(this.plugin, project.filePath, e))
+        return value
+      })
     }
 
     prop(t('project.members'), project.teamMembers.length === 0, t('overview.noMembers'), (value) => {

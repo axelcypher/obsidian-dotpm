@@ -166,7 +166,7 @@ describe('project helpers', () => {
 
 describe('tidyProjectFields', () => {
   it('drops the list once every column shows in the default order', () => {
-    expect(tidyProjectFields(['status', 'progress', 'tasks', 'members', 'due'])).toBeUndefined()
+    expect(tidyProjectFields(['status', 'types', 'progress', 'tasks', 'members', 'due', 'tags'])).toBeUndefined()
     expect(tidyProjectFields(undefined)).toBeUndefined()
   })
 

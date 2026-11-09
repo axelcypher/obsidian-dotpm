@@ -16,6 +16,9 @@
 - **Group by status:** the project list's *Group* menu has a *Status* option with one group per preset.
 - **Predefined presets:** *Settings → Project statuses* holds the presets with name, color, icon and order (drag to reorder). The order of the presets is the order of the list.
 - **Plain Markdown:** the status is a property of the project note (`status` by default, configurable), for example `status: active`. A hand-typed preset name such as `status: Active` is recognized too. A preset's id follows its name until a project uses it, so new presets get readable values.
+- **Project types:** say what a project is about, such as *New build*, *Conversion*, *Extension*, *Existing building* or *Listed building* (in German *Neubau*, *Umbau*, *Anbau*, *Bauen im Bestand*, *Denkmal*). A project can have several. They are toggled from the type column of the project list and from the project overview, and kept as a list in the project note (`projectType` by default, configurable), for example `projectType: [umbau, denkmal]`. Types only label a project: they don't tint or reorder the list. The presets live in *Settings → Project types*.
+- **Tags column:** the project list can show the project note's own tags as a column.
+- **More columns:** status, type and tags are columns of the project list that the *Fields* menu shows, hides and reorders like the others.
 - **Plugin identity:** own plugin ID `axlc-dotpm-revamped` and name *dotpm (Revamped)*.
 - **Release workflow:** streamlined build & release workflow shared with my other revamps (upstream CI, CodeQL, package publishing and issue templates were removed). Builds run with pnpm on Node 24, also on Windows.
 
@@ -36,6 +39,18 @@ Needs Obsidian 1.13 or newer. Works on desktop and mobile.
 3. The row takes the status color and moves to its place in the list.
 
 Under the same heading you choose the note property the status is kept in and whether the list is ordered by status. Changing the property reads statuses from the new property; values already written under the old one stay where they are.
+
+## Project types
+
+1. Open **Settings → dotpm (Revamped) → Project types** and adjust the presets: name, color, icon, order.
+2. In the project list, click a project's type chip (or *No type*) and tick a type. Each pick adds or removes one type; open the menu again for the next one. *Remove all types* clears them.
+3. On a project overview, the types are the first row under *Properties* and open the same menu.
+
+Status and types need different properties. Types written by hand as text, such as `projectType: Umbau, Denkmal`, are read too and become a list on the next change.
+
+## Columns of the project list
+
+**Fields** in the header of the project list shows, hides and reorders the columns: *Status*, *Type*, *Progress*, *Tasks*, *Members*, *Due* and *Tags*. The tags column shows the project note's own `tags`, the first three as chips and the rest as a count.
 
 ## About dotpm
 
@@ -114,6 +129,7 @@ One column per status, or per priority, assignee, tag, type or custom field. Dra
 
 - Statuses and priorities with label, color and icon, global or per project
 - Project statuses with label, color, icon and order, switched from the project list (revamp)
+- Project types, several per project, toggled from the project list (revamp)
 - Per-project overrides for default view, scheduling and archiving
 - Team members, global and per project
 

@@ -132,9 +132,19 @@
 .pm-project-row--status > td:first-child {
   box-shadow: inset 3px 0 0 var(--pm-project-status-color);
 }
-.pm-project-status--empty {
+.pm-project-label--empty {
   color: var(--text-faint);
   border-style: dashed;
+}
+/* Types and tags sit side by side in one cell, or in one property row of an overview. */
+.pm-project-label-list {
+  display: inline-flex;
+  flex-wrap: nowrap;
+  align-items: center;
+  gap: 4px;
+}
+.pm-prop-value .pm-project-label-list {
+  flex-wrap: wrap;
 }
 .pm-project-group-swatch {
   flex-shrink: 0;

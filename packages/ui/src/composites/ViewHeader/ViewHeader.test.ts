@@ -679,7 +679,7 @@ describe('project fields popover', () => {
     const onChange = vi.fn<(shown: ProjectListField[]) => void>()
     openProjectFieldsPopover(document.body.createEl('button'), { shown: ['progress', 'tasks', 'due'], onChange })
     expect(ids('.pm-vis-row:not(.is-hidden)')).toEqual(['project', 'progress', 'tasks', 'due'])
-    expect(ids('.pm-vis-row.is-hidden')).toEqual(['status', 'members'])
+    expect(ids('.pm-vis-row.is-hidden')).toEqual(['status', 'types', 'members', 'tags'])
     expect(document.body.find('.pm-vis-row')?.find('.pm-vis-eye')).toBeNull()
 
     document.body.find('.pm-vis-row[data-id="tasks"]')?.querySelector<HTMLButtonElement>('.pm-vis-eye')?.click()
@@ -690,11 +690,15 @@ describe('project fields popover', () => {
     expect(onChange).toHaveBeenLastCalledWith(['progress', 'tasks', 'members', 'due'])
     document.body.find('.pm-vis-row[data-id="status"]')?.querySelector<HTMLButtonElement>('.pm-vis-eye')?.click()
     expect(onChange).toHaveBeenLastCalledWith(['status', 'progress', 'tasks', 'members', 'due'])
+    document.body.find('.pm-vis-row[data-id="tags"]')?.querySelector<HTMLButtonElement>('.pm-vis-eye')?.click()
+    document.body.find('.pm-vis-row[data-id="types"]')?.querySelector<HTMLButtonElement>('.pm-vis-eye')?.click()
+    const all = ['status', 'types', 'progress', 'tasks', 'members', 'due', 'tags']
+    expect(onChange).toHaveBeenLastCalledWith(all)
     expect(document.body.querySelector<HTMLButtonElement>('.pm-fields-foot .pm-chip-btn')?.disabled).toBe(true)
 
     document.body.find('.pm-vis-row[data-id="due"]')?.querySelector<HTMLButtonElement>('.pm-vis-eye')?.click()
     document.body.find('.pm-fields-foot .pm-chip-btn')?.click()
-    expect(onChange).toHaveBeenLastCalledWith(['status', 'progress', 'tasks', 'members', 'due'])
+    expect(onChange).toHaveBeenLastCalledWith(all)
   })
 })
 

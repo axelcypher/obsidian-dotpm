@@ -9,12 +9,18 @@ import {
   type ProjectListRow,
   formatDateShort,
   dateUrgency,
-  projectStatusRank,
-  resolveProjectStatus,
+  projectLabelRank,
+  resolveProjectLabel,
   t
 } from '@dotpm/core'
 import { safeAsync, CollapseToggle, ProjectRow, projectFieldLabel } from '@dotpm/ui'
-import { addProjectStatusItems, openProjectStatusMenu, projectRowStatus } from '#ui/projectStatus'
+import {
+  addProjectStatusItems,
+  openProjectStatusMenu,
+  openProjectTypeMenu,
+  projectRowStatus,
+  projectRowTypes
+} from '#ui/projectLabels'
 import { linkedRefs } from './linkedRefs'
 
 const columns = (fields: ProjectListField[]): { label: string; cls?: string }[] => [
@@ -48,8 +54,8 @@ export function projectListItems(plugin: PMPlugin): ProjectListItem[] {
       title: ref.title,
       folder: folderOf(projectFolderOf(plugin.app, ref.path) ?? ref.path),
       tags: ref.tags,
-      status: resolveProjectStatus(statuses, ref.status)?.id ?? '',
-      statusRank: projectStatusRank(statuses, ref.status),
+      status: resolveProjectLabel(statuses, ref.status)?.id ?? '',
+      statusRank: projectLabelRank(statuses, ref.status),
       done,
       total,
       overdue,
@@ -100,14 +106,14 @@ export function renderProjectTable(
 
 function groupLabel(ctx: ProjectListContext, groupBy: ProjectGroupBy, key: string): string {
   if (groupBy === 'status') {
-    return resolveProjectStatus(ctx.plugin.settings.projectStatuses, key)?.label ?? t('list.noStatus')
+    return resolveProjectLabel(ctx.plugin.settings.projectStatuses, key)?.label ?? t('list.noStatus')
   }
   if (groupBy === 'tag') return key ? `#${key}` : t('list.noTag')
   return key ? `${key}/` : t('list.noFolder')
 }
 
 function renderStatusSwatch(ctx: ProjectListContext, parent: HTMLElement, key: string): void {
-  const status = resolveProjectStatus(ctx.plugin.settings.projectStatuses, key)
+  const status = resolveProjectLabel(ctx.plugin.settings.projectStatuses, key)
   if (!status) return
   const swatch = parent.createSpan({ cls: 'pm-project-group-swatch' })
   swatch.style.setProperty('--pm-project-status-color', status.color)
@@ -137,6 +143,10 @@ function renderRow(ctx: ProjectListContext, tbody: HTMLElement, row: ProjectList
     dueUrgency: dateUrgency(item.latestDue, item.overdue > 0),
     status: projectRowStatus(ctx.plugin, item.path),
     onStatus: (e) => openProjectStatusMenu(ctx.plugin, item.path, e),
+    types: projectRowTypes(ctx.plugin, item.path),
+    onTypes: (e) => openProjectTypeMenu(ctx.plugin, item.path, e),
+    tags: item.tags,
+    showTagColors: ctx.plugin.settings.showTagColors,
     onToggleCollapsed: row.collapsible
       ? safeAsync(async () => {
           await ctx.plugin.toggleProjectCollapsed(item.path)

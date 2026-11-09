@@ -3,12 +3,15 @@ import type { SettingDefinitionItem, SettingDefinitionPage } from 'obsidian'
 import type PMPlugin from './main'
 import {
   type PMSettings,
-  type ProjectStatusConfig,
+  type ProjectLabelConfig,
   DEFAULT_PALETTE_COLOR,
   DEFAULT_PROJECT_STATUS_PROPERTY,
+  DEFAULT_PROJECT_TYPE_PROPERTY,
   DEFAULT_SETTINGS,
-  isValidProjectStatusProperty,
-  projectStatusIdFor,
+  isValidProjectLabelProperty,
+  projectLabelIdFor,
+  projectStatusProperty,
+  projectTypeProperty,
   priorityIconSetLabels,
   makeId,
   flattenTasks,
@@ -27,6 +30,13 @@ import {
 import { renderPaletteFields, renderStatusDoneToggle } from './ui/PaletteListEditor'
 import { renderPersonPicker } from './ui/PersonPicker'
 import { generateToken } from './api/LocalApiServer'
+import type { ProjectRef } from './store'
+
+/** A status or type property is free when a project save doesn't own it and the other label doesn't use it. */
+function labelPropertyFits(value: string, fallback: string, other: string): boolean {
+  const key = value.trim() || fallback
+  return isValidProjectLabelProperty(key) && key !== other
+}
 
 export type { PMSettings }
 export { DEFAULT_SETTINGS }
@@ -114,6 +124,7 @@ export class PMSettingTab extends PluginSettingTab {
         ]
       },
       this.projectStatusGroup(),
+      this.projectTypeGroup(),
       {
         type: 'group',
         heading: t('settings.style.heading'),
@@ -294,7 +305,7 @@ export class PMSettingTab extends PluginSettingTab {
     }
     if (key.startsWith('localApi')) await this.plugin.syncLocalApi()
     if (key === 'dateFormat') setDateFormat(this.plugin.settings.dateFormat)
-    if (key === 'projectStatusProperty') this.rebuildIndex()
+    if (key === 'projectStatusProperty' || key === 'projectTypeProperty') this.rebuildIndex()
     this.plugin.refreshViews()
     this.refreshDomState()
   }
@@ -360,11 +371,21 @@ export class PMSettingTab extends PluginSettingTab {
   }
 
   private projectStatusGroup(): SettingDefinitionItem {
+    const { settings } = this.plugin
     return {
       type: 'group',
       heading: t('settings.projectStatus.heading'),
       items: [
-        this.projectStatusesPage(),
+        this.projectLabelsPage({
+          entries: settings.projectStatuses,
+          name: t('settings.projectStatuses.name'),
+          desc: t('settings.projectStatuses.desc'),
+          empty: t('settings.projectStatuses.empty'),
+          add: t('settings.projectStatuses.add'),
+          newLabel: t('settings.projectStatuses.newLabel'),
+          count: (n) => tn('settings.statusCount', n),
+          inUse: (ref, id) => ref.status === id
+        }),
         {
           name: t('settings.projectStatusProperty.name'),
           desc: t('settings.projectStatusProperty.desc'),
@@ -374,7 +395,7 @@ export class PMSettingTab extends PluginSettingTab {
             key: 'projectStatusProperty',
             placeholder: DEFAULT_PROJECT_STATUS_PROPERTY,
             validate: (value) =>
-              value.trim() === '' || isValidProjectStatusProperty(value)
+              labelPropertyFits(value, DEFAULT_PROJECT_STATUS_PROPERTY, projectTypeProperty(settings))
                 ? undefined
                 : t('settings.projectStatusProperty.invalid')
           }
@@ -389,44 +410,89 @@ export class PMSettingTab extends PluginSettingTab {
     }
   }
 
-  /** Like the task statuses, without a complete flag, and the list may be emptied. */
-  private projectStatusesPage(): SettingDefinitionPage {
-    const statuses = this.plugin.settings.projectStatuses
+  private projectTypeGroup(): SettingDefinitionItem {
+    const { settings } = this.plugin
+    return {
+      type: 'group',
+      heading: t('settings.projectType.heading'),
+      items: [
+        this.projectLabelsPage({
+          entries: settings.projectTypes,
+          name: t('settings.projectTypes.name'),
+          desc: t('settings.projectTypes.desc'),
+          empty: t('settings.projectTypes.empty'),
+          add: t('settings.projectTypes.add'),
+          newLabel: t('settings.projectTypes.newLabel'),
+          count: (n) => tn('settings.projectTypeCount', n),
+          inUse: (ref, id) => ref.types.includes(id)
+        }),
+        {
+          name: t('settings.projectTypeProperty.name'),
+          desc: t('settings.projectTypeProperty.desc'),
+          aliases: ['project type', 'property', 'frontmatter'],
+          control: {
+            type: 'text',
+            key: 'projectTypeProperty',
+            placeholder: DEFAULT_PROJECT_TYPE_PROPERTY,
+            validate: (value) =>
+              labelPropertyFits(value, DEFAULT_PROJECT_TYPE_PROPERTY, projectStatusProperty(settings))
+                ? undefined
+                : t('settings.projectTypeProperty.invalid')
+          }
+        }
+      ]
+    }
+  }
+
+  /** The presets a project note picks from: statuses or types. Unlike the task statuses, the list may be emptied. */
+  private projectLabelsPage(opts: {
+    entries: ProjectLabelConfig[]
+    name: string
+    desc: string
+    empty: string
+    add: string
+    newLabel: string
+    count: (n: number) => string
+    /** Whether the project's note already holds the id. */
+    inUse: (ref: ProjectRef, id: string) => boolean
+  }): SettingDefinitionPage {
+    const { entries } = opts
     return {
       type: 'page',
-      name: t('settings.projectStatuses.name'),
-      desc: t('settings.projectStatuses.desc'),
-      displayValue: () => tn('settings.statusCount', this.plugin.settings.projectStatuses.length),
+      name: opts.name,
+      desc: opts.desc,
+      displayValue: () => opts.count(entries.length),
       items: [
         {
           type: 'list',
-          heading: t('settings.projectStatuses.name'),
-          emptyState: t('settings.projectStatuses.empty'),
-          items: statuses.map((status) => ({
-            name: status.label,
+          heading: opts.name,
+          emptyState: opts.empty,
+          items: entries.map((entry) => ({
+            name: entry.label,
             render: (setting: Setting) => {
               setting.setClass('pm-palette-row')
-              renderPaletteFields(setting.controlEl, status, () => {
-                this.followLabel(status)
+              renderPaletteFields(setting.controlEl, entry, () => {
+                this.followLabel(entries, entry, opts.inUse)
                 this.persist()
               })
             }
           })),
-          onReorder: (from, to) => this.reorder(statuses, from, to),
+          onReorder: (from, to) => this.reorder(entries, from, to),
           onDelete: (index) => {
-            statuses.splice(index, 1)
+            entries.splice(index, 1)
             this.persist()
             this.update()
           },
           addItem: {
-            name: t('settings.projectStatuses.add'),
+            name: opts.add,
             action: () => {
-              statuses.push({
-                id: 'status-' + makeId().slice(0, 6),
-                label: t('settings.projectStatuses.newLabel'),
-                color: DEFAULT_PALETTE_COLOR,
-                icon: ''
-              })
+              const label = opts.newLabel
+              const id =
+                projectLabelIdFor(
+                  label,
+                  entries.map((entry) => entry.id)
+                ) || makeId().slice(0, 6)
+              entries.push({ id, label, color: DEFAULT_PALETTE_COLOR, icon: '' })
               this.persist()
               this.update()
             }
@@ -440,12 +506,15 @@ export class PMSettingTab extends PluginSettingTab {
    * A preset's id is what project notes hold, so it follows the label while no project
    * uses it yet, and stays put once one does.
    */
-  private followLabel(status: ProjectStatusConfig): void {
-    const { projectStatuses } = this.plugin.settings
-    if (this.plugin.index.projectRefs(true).some((ref) => ref.status === status.id)) return
-    const taken = projectStatuses.filter((other) => other !== status).map((other) => other.id)
-    const id = projectStatusIdFor(status.label, taken)
-    if (id) status.id = id
+  private followLabel(
+    entries: ProjectLabelConfig[],
+    entry: ProjectLabelConfig,
+    inUse: (ref: ProjectRef, id: string) => boolean
+  ): void {
+    if (this.plugin.index.projectRefs(true).some((ref) => inUse(ref, entry.id))) return
+    const taken = entries.filter((other) => other !== entry).map((other) => other.id)
+    const id = projectLabelIdFor(entry.label, taken)
+    if (id) entry.id = id
   }
 
   private statusesPage(): SettingDefinitionPage {

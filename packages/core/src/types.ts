@@ -297,6 +297,15 @@ export type ProjectStatusConfig = ProjectLabelConfig
 /** What a project is about, such as a conversion or a listed building. A project can have several. */
 export type ProjectTypeConfig = ProjectLabelConfig
 
+/** One property of a project's data note, shown under its group on the project overview. */
+export interface ProjectDataField {
+  /** The property name in the data note, which other programs read too. */
+  key: string
+  label: string
+  /** Fields with the same group show together, groups in the order their first field comes. */
+  group: string
+}
+
 /** Overrides a project may set in its own file. An absent field falls back to the global settings. */
 export interface ProjectConfig {
   statuses?: StatusConfig[]
@@ -380,6 +389,16 @@ export interface PMSettings {
   projectTypes: ProjectTypeConfig[]
   /** The project note property holding its types. Empty falls back to `DEFAULT_PROJECT_TYPE_PROPERTY`. */
   projectTypeProperty: string
+  /** The folder in a project's folder that holds one note per meeting. */
+  meetingsFolder: string
+  /** Names, without `.md`, of the notes in a project's folder for its participants, its data and its timesheet. */
+  participantsFile: string
+  projectDataFile: string
+  timesheetFile: string
+  /** Who a new timesheet entry is booked for until it is changed. */
+  timesheetPerson: string
+  /** The properties of a project's data note, in the order the overview shows them. */
+  projectDataFields: ProjectDataField[]
   /** Icons for priorities that don't carry their own. */
   priorityIcons: PriorityIconSet
   /** Task properties every project starts with. A project adds to these, or overrides one by id. */
@@ -520,6 +539,12 @@ export const DEFAULT_SETTINGS: PMSettings = {
   sortProjectsByStatus: true,
   projectTypes: DEFAULT_PROJECT_TYPES,
   projectTypeProperty: DEFAULT_PROJECT_TYPE_PROPERTY,
+  meetingsFolder: 'Meetings',
+  participantsFile: 'Participants',
+  projectDataFile: 'Project data',
+  timesheetFile: 'Timesheet',
+  timesheetPerson: '',
+  projectDataFields: [],
   priorityIcons: 'chevrons',
   customFields: [],
   globalTeamMembers: [],

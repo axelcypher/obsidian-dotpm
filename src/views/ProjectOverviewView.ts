@@ -40,6 +40,13 @@ import {
 } from '@dotpm/ui'
 import { openProjectStatusMenu, openProjectTypeMenu, projectRowStatus, projectRowTypes } from '#ui/projectLabels'
 import { linkedRefs } from './linkedRefs'
+import {
+  type FileSectionContext,
+  renderMeetingsSection,
+  renderParticipantsSection,
+  renderProjectDataSection,
+  renderTimesheetSection
+} from './overview/projectFileSections'
 
 export const PM_PROJECT_OVERVIEW_VIEW_TYPE = 'pm-project-overview'
 
@@ -64,6 +71,9 @@ export class ProjectOverviewView extends ItemView {
   private state: ProjectOverviewState = {}
   private project: Project | null = null
   private description = new Component()
+  /** Owns what the project's own notes render into the overview; replaced on each repaint. */
+  private files = new Component()
+  private fileRenderTimer: number | null = null
   private container!: HTMLElement
   /** Parent and sub-projects as last drawn, so an unrelated index change doesn't repaint. */
   private treeSignature = ''
@@ -120,10 +130,34 @@ export class ProjectOverviewView extends ItemView {
         if (this.project && this.treeSignature !== this.signTree(this.project)) this.render()
       })
     )
+    // Meetings, participants, data and timesheet are plain notes the store doesn't watch.
+    const onFile = (path: string): void => {
+      if (this.project && this.plugin.projectFiles.concerns(this.project.filePath, path)) this.scheduleFileRender()
+    }
+    this.registerEvent(this.app.metadataCache.on('changed', (file) => onFile(file.path)))
+    this.registerEvent(this.app.vault.on('create', (file) => onFile(file.path)))
+    this.registerEvent(this.app.vault.on('delete', (file) => onFile(file.path)))
+    this.registerEvent(
+      this.app.vault.on('rename', (file, oldPath) => {
+        onFile(file.path)
+        onFile(oldPath)
+      })
+    )
     return Promise.resolve()
   }
 
+  /** A note being typed in saves every few seconds; one repaint covers a burst of them. */
+  private scheduleFileRender(): void {
+    if (this.fileRenderTimer !== null) window.clearTimeout(this.fileRenderTimer)
+    this.fileRenderTimer = window.setTimeout(() => {
+      this.fileRenderTimer = null
+      this.render()
+    }, 500)
+  }
+
   onClose(): Promise<void> {
+    if (this.fileRenderTimer !== null) window.clearTimeout(this.fileRenderTimer)
+    this.files.unload()
     this.description.unload()
     this.contentEl.empty()
     return Promise.resolve()
@@ -148,8 +182,18 @@ export class ProjectOverviewView extends ItemView {
   render(): void {
     const project = this.project
     if (!project) return
+    const scroll = this.contentEl.scrollTop
     this.container.empty()
     this.treeSignature = this.signTree(project)
+    this.files.unload()
+    this.files = new Component()
+    this.files.load()
+    const files: FileSectionContext = {
+      plugin: this.plugin,
+      projectPath: project.filePath,
+      component: this.files,
+      section: (parent, title, note) => this.section(parent, title, note)
+    }
 
     const config = this.plugin.store.configFor(project)
     const tasks = flattenTasks(project.tasks)
@@ -166,9 +210,14 @@ export class ProjectOverviewView extends ItemView {
 
     this.renderMetrics(main, project, rollup)
     this.renderDescription(main, project)
+    renderMeetingsSection(main, files)
     this.renderMilestones(main, tasks, config)
     this.renderSubProjects(main, project)
+    renderProjectDataSection(side, files)
+    renderParticipantsSection(side, files)
+    renderTimesheetSection(side, files)
     this.renderProperties(side, project, tasks, rollup)
+    this.contentEl.scrollTop = scroll
   }
 
   /** Statuses and types are part of it: they live in the notes' properties, which only the index sees change. */

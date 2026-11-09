@@ -1,5 +1,5 @@
 import { App, Notice, Platform, PluginSettingTab, Setting, debounce } from 'obsidian'
-import type { SettingDefinitionItem, SettingDefinitionPage } from 'obsidian'
+import type { SettingDefinition, SettingDefinitionItem, SettingDefinitionPage } from 'obsidian'
 import type PMPlugin from './main'
 import {
   type PMSettings,
@@ -9,6 +9,10 @@ import {
   DEFAULT_PROJECT_TYPE_PROPERTY,
   DEFAULT_SETTINGS,
   isValidProjectLabelProperty,
+  isValidDataKey,
+  defaultProjectFileNames,
+  projectDataKeyFor,
+  type ProjectDataField,
   projectLabelIdFor,
   projectStatusProperty,
   projectTypeProperty,
@@ -31,6 +35,48 @@ import { renderPaletteFields, renderStatusDoneToggle } from './ui/PaletteListEdi
 import { renderPersonPicker } from './ui/PersonPicker'
 import { generateToken } from './api/LocalApiServer'
 import type { ProjectRef } from './store'
+
+const FILE_NAME_CHARS = /[\\/:*?"<>|]/
+
+/**
+ * Group, label and property of one data field. The property follows group and label
+ * while it is still the one they gave it, and is kept once typed by hand.
+ */
+function renderDataFieldInputs(
+  parent: HTMLElement,
+  field: ProjectDataField,
+  fields: ProjectDataField[],
+  onChanged: () => void
+): void {
+  const others = (): string[] => fields.filter((other) => other !== field).map((other) => other.key)
+  const input = (value: string, placeholder: string, cls: string): HTMLInputElement => {
+    const el = parent.createEl('input', { type: 'text', value, cls, attr: { placeholder, 'aria-label': placeholder } })
+    return el
+  }
+  const group = input(field.group, t('settings.projectDataField.group'), 'pm-data-field-group')
+  const label = input(field.label, t('settings.projectDataField.label'), 'pm-data-field-label')
+  const key = input(field.key, t('settings.projectDataField.key'), 'pm-data-field-key')
+  const rename = (apply: () => void): void => {
+    const generated = projectDataKeyFor(field.group, field.label, others())
+    apply()
+    if (field.key === generated) {
+      field.key = projectDataKeyFor(field.group, field.label, others())
+      key.value = field.key
+    }
+    onChanged()
+  }
+  group.addEventListener('change', () => rename(() => (field.group = group.value.trim())))
+  label.addEventListener('change', () => rename(() => (field.label = label.value.trim())))
+  key.addEventListener('change', () => {
+    const value = key.value.trim()
+    const valid = isValidDataKey(value) && !others().includes(value)
+    key.toggleClass('is-invalid', !valid)
+    key.title = valid ? '' : t('settings.projectDataField.invalidKey')
+    if (!valid) return
+    field.key = value
+    onChanged()
+  })
+}
 
 /** A status or type property is free when a project save doesn't own it and the other label doesn't use it. */
 function labelPropertyFits(value: string, fallback: string, other: string): boolean {
@@ -125,6 +171,7 @@ export class PMSettingTab extends PluginSettingTab {
       },
       this.projectStatusGroup(),
       this.projectTypeGroup(),
+      this.projectFilesGroup(),
       {
         type: 'group',
         heading: t('settings.style.heading'),
@@ -438,6 +485,80 @@ export class PMSettingTab extends PluginSettingTab {
               labelPropertyFits(value, DEFAULT_PROJECT_TYPE_PROPERTY, projectStatusProperty(settings))
                 ? undefined
                 : t('settings.projectTypeProperty.invalid')
+          }
+        }
+      ]
+    }
+  }
+
+  private projectFilesGroup(): SettingDefinitionItem {
+    const names = defaultProjectFileNames()
+    const fileName = (key: keyof typeof names, name: string, desc: string): SettingDefinition => ({
+      name,
+      desc,
+      aliases: ['project files', 'folder', 'note'],
+      control: {
+        type: 'text',
+        key,
+        placeholder: names[key],
+        validate: (value) => (FILE_NAME_CHARS.test(value) ? t('settings.fileName.invalid') : undefined)
+      }
+    })
+    return {
+      type: 'group',
+      heading: t('settings.projectFiles.heading'),
+      items: [
+        fileName('meetingsFolder', t('settings.meetingsFolder.name'), t('settings.meetingsFolder.desc')),
+        fileName('participantsFile', t('settings.participantsFile.name'), t('settings.participantsFile.desc')),
+        fileName('projectDataFile', t('settings.projectDataFile.name'), t('settings.projectDataFile.desc')),
+        fileName('timesheetFile', t('settings.timesheetFile.name'), t('settings.timesheetFile.desc')),
+        {
+          name: t('settings.timesheetPerson.name'),
+          desc: t('settings.timesheetPerson.desc'),
+          aliases: ['timesheet', 'hours', 'person'],
+          control: { type: 'text', key: 'timesheetPerson' }
+        },
+        this.projectDataFieldsPage()
+      ]
+    }
+  }
+
+  private projectDataFieldsPage(): SettingDefinitionPage {
+    const fields = this.plugin.settings.projectDataFields
+    return {
+      type: 'page',
+      name: t('settings.projectDataFields.name'),
+      desc: t('settings.projectDataFields.desc'),
+      displayValue: () => tn('settings.dataFieldCount', fields.length),
+      items: [
+        {
+          type: 'list',
+          heading: t('settings.projectDataFields.name'),
+          emptyState: t('settings.projectDataFields.empty'),
+          items: fields.map((field) => ({
+            name: field.label,
+            render: (setting: Setting) => {
+              setting.setClass('pm-palette-row')
+              setting.setClass('pm-data-field-row')
+              renderDataFieldInputs(setting.controlEl, field, fields, () => this.persist())
+            }
+          })),
+          onReorder: (from, to) => this.reorder(fields, from, to),
+          onDelete: (index) => {
+            fields.splice(index, 1)
+            this.persist()
+            this.update()
+          },
+          addItem: {
+            name: t('settings.projectDataFields.add'),
+            action: () => {
+              const group = fields[fields.length - 1]?.group ?? ''
+              const label = t('settings.projectDataFields.newLabel')
+              const keys = fields.map((field) => field.key)
+              fields.push({ group, label, key: projectDataKeyFor(group, label, keys) })
+              this.persist()
+              this.update()
+            }
           }
         }
       ]

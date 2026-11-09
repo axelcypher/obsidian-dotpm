@@ -184,8 +184,21 @@ function openProjectContextMenu(ctx: ProjectListContext, ref: ProjectRef, e: Mou
   if (ctx.plugin.settings.projectStatuses.length || ref.status) {
     menu.addSeparator()
     addProjectStatusItems(menu, ctx.plugin, ref.path)
-    menu.addSeparator()
   }
+  menu.addSeparator()
+  menu.addItem((item) =>
+    item
+      .setTitle(t('timesheet.add'))
+      .setIcon('timer')
+      .onClick(() => ctx.plugin.logTimeFlow(ref.path))
+  )
+  menu.addItem((item) =>
+    item
+      .setTitle(t('meetings.new'))
+      .setIcon('messages-square')
+      .onClick(safeAsync(() => ctx.plugin.newMeetingFlow(ref.path)))
+  )
+  menu.addSeparator()
   menu.addItem((item) =>
     item
       .setTitle(t('commands.duplicateProject'))

@@ -3,6 +3,8 @@ import {
   DEFAULT_PALETTE_COLOR,
   DEFAULT_SETTINGS,
   defaultPriorities,
+  defaultProjectDataFields,
+  defaultProjectFileNames,
   defaultProjectStatuses,
   defaultProjectTypes,
   defaultStatuses,
@@ -19,6 +21,8 @@ import {
   dedupePeople,
   displayName,
   localApiPortFor,
+  formatHours,
+  locale,
   projectLabelValues,
   projectStatusProperty,
   projectTypeProperty,
@@ -65,6 +69,8 @@ import {
 import { Notifier } from './components/Notifier'
 import { AutoArchiver } from './components/AutoArchiver'
 import { IdRepair } from './components/IdRepair'
+import { ProjectFiles, type ProjectFileKind } from './components/ProjectFiles'
+import { TimesheetEntryModal } from './modals/TimesheetEntryModal'
 import { migrateBoardCardConfig, migrateProjects, migrateProjectLayout, migrateTaskRefs } from './migration'
 import { LocalApi } from './api/LocalApi'
 import { exportViewAsHtml } from './export/exportView'
@@ -78,6 +84,7 @@ export default class PMPlugin extends Plugin {
   autoArchiver!: AutoArchiver
   idRepair!: IdRepair
   router!: PMViewRouter
+  projectFiles!: ProjectFiles
   localApi!: LocalApiServer
   /** Leaves sent to the markdown editor for a note, which the swap leaves alone while they show it. */
   private markdownEscapes = new WeakMap<WorkspaceLeaf, string>()
@@ -123,6 +130,7 @@ export default class PMPlugin extends Plugin {
     this.autoArchiver = new AutoArchiver(this)
     this.idRepair = new IdRepair(this)
     this.router = new PMViewRouter(this)
+    this.projectFiles = new ProjectFiles(this.app, () => this.settings)
     const api = new LocalApi(this)
     this.register(api.attach())
     this.localApi = new LocalApiServer(
@@ -193,6 +201,18 @@ export default class PMPlugin extends Plugin {
       callback: () => {
         this.pickProjectThenCreateTask('pick-parent')
       }
+    })
+
+    this.addCommand({
+      id: 'new-meeting',
+      name: t('commands.newMeeting'),
+      callback: () => this.withProjectPath(safeAsync((path: string) => this.newMeetingFlow(path)))
+    })
+
+    this.addCommand({
+      id: 'log-time',
+      name: t('commands.logTime'),
+      callback: () => this.withProjectPath((path) => this.logTimeFlow(path))
     })
 
     this.addCommand({
@@ -429,6 +449,14 @@ export default class PMPlugin extends Plugin {
     // Unlike task statuses, a vault may clear its project statuses on purpose.
     if (!Array.isArray(saved?.projectStatuses)) this.settings.projectStatuses = defaultProjectStatuses()
     if (!Array.isArray(saved?.projectTypes)) this.settings.projectTypes = defaultProjectTypes()
+    if (!Array.isArray(saved?.projectDataFields)) this.settings.projectDataFields = defaultProjectDataFields()
+    // File names a vault never set start in its language and then stay, so notes keep being found.
+    for (const [key, name] of Object.entries(defaultProjectFileNames()) as [
+      keyof ReturnType<typeof defaultProjectFileNames>,
+      string
+    ][]) {
+      if (typeof saved?.[key] !== 'string') this.settings[key] = name
+    }
     if (!this.settings.projectFilters) this.settings.projectFilters = {}
     if (!this.settings.scopeViews) this.settings.scopeViews = {}
     if (!this.settings.collapsedTasks) this.settings.collapsedTasks = {}
@@ -598,6 +626,78 @@ export default class PMPlugin extends Plugin {
       if (next.length) frontmatter[key] = next
       else Reflect.deleteProperty(frontmatter, key)
     })
+  }
+
+  /** Asks for a title, creates the note for today's meeting in the project's folder, and opens it. */
+  async newMeetingFlow(projectPath: string): Promise<void> {
+    const title = await promptText(this.app, t('meetings.titlePrompt'), '', t('meetings.defaultTitle'))
+    if (!title) return
+    const file = await this.projectFiles.createMeeting(projectPath, title)
+    await this.app.workspace.getLeaf('tab').openFile(file)
+  }
+
+  /** Opens the form for a timesheet entry and books it into the project's timesheet. */
+  logTimeFlow(projectPath: string): void {
+    const ref = this.index.projectRef(projectPath)
+    const people = dedupePeople(
+      [...this.settings.globalTeamMembers, ...(ref?.teamMembers ?? [])].map(displayName).filter(Boolean),
+      (name) => name.toLowerCase()
+    )
+    new TimesheetEntryModal(this.app, {
+      projectTitle: ref?.title ?? projectPath,
+      person: this.settings.timesheetPerson,
+      people,
+      onSubmit: async (entry) => {
+        await this.projectFiles.addTimesheetEntry(projectPath, entry)
+        if (entry.person && entry.person !== this.settings.timesheetPerson) {
+          this.settings.timesheetPerson = entry.person
+          await this.saveSettings()
+        }
+        this.showNotice(
+          t('timesheet.logged', { hours: formatHours(entry.hours, locale()), project: ref?.title ?? projectPath })
+        )
+      }
+    }).open()
+  }
+
+  /** Opens one of the project's files in a new tab, creating it from its template first if needed. */
+  async openProjectFile(projectPath: string, kind: ProjectFileKind): Promise<void> {
+    const file = await this.projectFiles.ensure(projectPath, kind)
+    await this.app.workspace.getLeaf('tab').openFile(file)
+  }
+
+  /**
+   * The project a command acts on: the one the active tab shows or a note of it is open
+   * in, and failing that one picked from the list.
+   */
+  private withProjectPath(onChoose: (path: string) => void): void {
+    const active = this.activeProjectPath()
+    if (active) {
+      onChoose(active)
+      return
+    }
+    const refs = this.index.projectRefs()
+    if (!refs.length) {
+      this.showNotice(this.index.ready ? t('picker.noProjects') : t('picker.indexing'))
+      return
+    }
+    openProjectPicker(this, refs, (ref) => onChoose(ref.path))
+  }
+
+  private activeProjectPath(): string | null {
+    const { workspace } = this.app
+    const shown =
+      workspace.getActiveViewOfType(ProjectOverviewView)?.getState().filePath ??
+      workspace.getActiveViewOfType(ProjectEditView)?.getState().filePath ??
+      workspace.getActiveViewOfType(ProjectView)?.project?.filePath
+    if (shown) return shown
+    const file = workspace.getActiveFile()
+    if (!file) return null
+    const refs = this.index.projectRefs(true)
+    const owner =
+      refs.find((ref) => ref.path === file.path) ??
+      refs.find((ref) => file.path.startsWith(`${this.projectFiles.folder(ref.path)}/`))
+    return owner?.path ?? null
   }
 
   /** Prompts for a title, copies the project with fresh task ids, and opens the copy. */

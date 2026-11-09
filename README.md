@@ -19,6 +19,8 @@
 - **Project types:** say what a project is about, such as *New build*, *Conversion*, *Extension*, *Existing building* or *Listed building* (in German *Neubau*, *Umbau*, *Anbau*, *Bauen im Bestand*, *Denkmal*). A project can have several. They are toggled from the type column of the project list and from the project overview, and kept as a list in the project note (`projectType` by default, configurable), for example `projectType: [umbau, denkmal]`. Types only label a project: they don't tint or reorder the list. The presets live in *Settings → Project types*.
 - **Tags column:** the project list can show the project note's own tags as a column.
 - **More columns:** status, type and tags are columns of the project list that the *Fields* menu shows, hides and reorders like the others.
+- **Project files:** each project keeps a folder of meeting notes, a participants note, a project data note and a timesheet in its own folder. The project overview shows the meetings as running text between description and milestones, and the data, participants and booked hours in its side column.
+- **Quick time entries:** *Log time* (command, project overview, project context menu) books date, hours, person and activity into the project's timesheet in one dialog.
 - **Plugin identity:** own plugin ID `axlc-dotpm-revamped` and name *dotpm (Revamped)*.
 - **Release workflow:** streamlined build & release workflow shared with my other revamps (upstream CI, CodeQL, package publishing and issue templates were removed). Builds run with pnpm on Node 24, also on Windows.
 
@@ -51,6 +53,28 @@ Status and types need different properties. Types written by hand as text, such 
 ## Columns of the project list
 
 **Fields** in the header of the project list shows, hides and reorders the columns: *Status*, *Type*, *Progress*, *Tasks*, *Members*, *Due* and *Tags*. The tags column shows the project note's own `tags`, the first three as chips and the rest as a count.
+
+## Project files
+
+Each project keeps these notes in its own folder, next to its note and its `_tasks/` folder. They are created when first needed, from the project overview or a command; their names are set in *Settings → Project files*.
+
+```
+Projects/
+  Website relaunch/
+    Website relaunch.md      the project note
+    _tasks/                  one note per task
+    Meetings/                one note per meeting, named "2026-11-09 Meeting"
+    Participants.md          table: Name | Role | Company | Email | Phone
+    Project data.md          properties: client, plot, zoning plan …
+    Timesheet.md             table: Date | Hours | Booked by | Activity
+```
+
+In a German vault the defaults are `Abgleiche/`, `Projektbeteiligte`, `Projektdaten` and `Stundenzettel`.
+
+- **Meetings:** *New meeting* (command, `+` in the overview's *Meetings* section, project context menu) asks for a title and creates `<today> <title>.md`. The overview renders every meeting note, newest first: the latest one open, older ones folded under their date and title.
+- **Participants:** a Markdown table, matched to its columns by the headings (*Name, Role, Company, Email, Phone*, also in German). The overview lists each person with role, company, email and phone.
+- **Project data:** the note's properties, flat and plain YAML, so other programs can read them, for example `grundstueck-flurstueck: 123/4`. *Settings → Project files → Project data fields* sets the fields with group, label and property name; the overview shows the filled ones grouped in that order, and properties no field names under *Other details*. A new data note starts with every field as an empty property, to fill in from the properties panel.
+- **Timesheet:** a Markdown table with one row per entry. *Log time* adds a row (date, hours as `1,5`, `1.5` or `1:30`, who, what); the person is remembered for the next entry. The overview shows the total, the hours per person and the latest entries. Rows can also be edited by hand.
 
 ## About dotpm
 
@@ -130,6 +154,7 @@ One column per status, or per priority, assignee, tag, type or custom field. Dra
 - Statuses and priorities with label, color and icon, global or per project
 - Project statuses with label, color, icon and order, switched from the project list (revamp)
 - Project types, several per project, toggled from the project list (revamp)
+- Meeting notes, participants, project data and a timesheet per project, shown on its overview (revamp)
 - Per-project overrides for default view, scheduling and archiving
 - Team members, global and per project
 

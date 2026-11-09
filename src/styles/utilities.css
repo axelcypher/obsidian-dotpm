@@ -216,3 +216,33 @@ body.pm-resize-active * {
   font-size: 1.125rem;
   color: var(--text-normal);
 }
+
+/* The timesheet entry form: label above each field, the hours focused first. */
+.pm-timesheet-form {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 0 12px;
+}
+.pm-timesheet-field {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.pm-timesheet-field:last-child {
+  grid-column: 1 / -1;
+}
+.pm-timesheet-label {
+  font-size: var(--font-ui-smaller);
+  color: var(--text-muted);
+}
+.pm-timesheet-error {
+  min-height: 1.2em;
+  margin-bottom: 8px;
+  font-size: var(--font-ui-smaller);
+  color: var(--text-error);
+}
+@media (max-width: 500px) {
+  .pm-timesheet-form {
+    grid-template-columns: 1fr;
+  }
+}

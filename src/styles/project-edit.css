@@ -242,3 +242,16 @@
   font-size: var(--font-ui-smaller);
   cursor: pointer;
 }
+
+/* A project data field in the settings: group, label and property side by side. */
+.pm-data-field-row input[type='text'] {
+  flex: 1;
+  min-width: 0;
+}
+.pm-data-field-row .pm-data-field-key {
+  font-family: var(--font-monospace);
+  font-size: var(--font-ui-smaller);
+}
+.pm-data-field-row input.is-invalid {
+  border-color: var(--text-error);
+}

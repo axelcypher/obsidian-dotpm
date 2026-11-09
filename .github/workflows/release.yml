@@ -1,98 +1,86 @@
-name: Release Obsidian Plugin
+# Einheitlicher Build- & Release-Workflow für alle Revamped-Plugins.
+# Quelle: obsidian-plugins/_shared/workflows/release.yml
+# NICHT im Plugin-Repo direkt bearbeiten, sondern hier ändern und mit
+# sync-workflows.ps1 in alle Repos kopieren (siehe AGENTS.md).
+
+name: Release
 
 on:
   push:
     tags:
-      - "[0-9]*"
-  workflow_call:
+      - "[0-9]+.[0-9]+.[0-9]+"
+  workflow_dispatch:
     inputs:
       tag:
-        description: 'Tag to release (e.g. 1.4.0)'
+        description: Bestehender Tag (x.y.z), der gebaut und veröffentlicht werden soll
         required: true
         type: string
 
 permissions:
   contents: write
-  id-token: write
-  attestations: write
 
 jobs:
-  build:
+  release:
     runs-on: ubuntu-latest
-
+    env:
+      TAG: ${{ inputs.tag || github.ref_name }}
     steps:
-      - name: Resolve tag ref
-        id: resolve
-        env:
-          REF: ${{ github.ref }}
-          INPUT_TAG: ${{ inputs.tag }}
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ env.TAG }}
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "24"
+
+      - name: Validate manifest
         run: |
-          if [ -n "$INPUT_TAG" ]; then
-            echo "ref=refs/tags/$INPUT_TAG" >> "$GITHUB_OUTPUT"
+          node -e '
+            const m = require("./manifest.json");
+            const tag = process.env.TAG;
+            const fail = (msg) => { console.error("::error::" + msg); process.exit(1); };
+            if (m.version !== tag) fail(`manifest.json version ${m.version} != tag ${tag}`);
+            if (!/^axlc-[a-z0-9-]+$/.test(m.id)) fail(`id "${m.id}" must match axlc-<name>`);
+            // Revamps: axlc-<name>-revamped + "(Revamped)". Eigene Werkzeuge (z. B. Revamp Manager) ohne beides.
+            const isRevamp = m.id.endsWith("-revamped");
+            if (isRevamp !== m.name.endsWith(" (Revamped)")) fail(`id "${m.id}" and name "${m.name}" must both be marked as revamp or neither`);
+            if (m.author !== "axelcypher") fail(`author must be axelcypher`);
+          '
+
+      - name: Install dependencies
+        env:
+          COREPACK_ENABLE_DOWNLOAD_PROMPT: "0"
+        run: |
+          # pnpm-Repos (z. B. dotpm) holen ihre pnpm-Version über corepack aus "packageManager".
+          if [ -f pnpm-lock.yaml ]; then corepack enable && pnpm install --frozen-lockfile
+          elif [ -f package-lock.json ]; then npm ci
+          elif [ -f package.json ]; then npm install
+          fi
+
+      - name: Build
+        run: |
+          if [ -f pnpm-lock.yaml ]; then pnpm run --if-present build
+          elif [ -f package.json ]; then npm run build --if-present
+          fi
+
+      - name: Collect release assets
+        run: |
+          # Build-Ausgabe liegt in dist/ oder im Repo-Stamm
+          if [ -f dist/main.js ]; then SRC=dist; else SRC=.; fi
+          mkdir -p release
+          cp "$SRC/main.js" release/
+          cp manifest.json release/
+          if [ -f "$SRC/styles.css" ]; then cp "$SRC/styles.css" release/; fi
+          ls -la release
+
+      - name: Create or update GitHub release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          if gh release view "$TAG" >/dev/null 2>&1; then
+            gh release upload "$TAG" release/* --clobber
           else
-            echo "ref=$REF" >> "$GITHUB_OUTPUT"
+            gh release create "$TAG" release/* --title "$TAG" --generate-notes --verify-tag
           fi
-
-      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
-        with:
-          ref: ${{ steps.resolve.outputs.ref }}
-          persist-credentials: false
-      - uses: pnpm/action-setup@71c92474e7e4f5bca283fb17ef80fba9cdb2b4b1 # v6
-      - uses: actions/setup-node@53b83947a5a98c8d113130e565377fae1a50d02f # v6
-        with:
-          node-version-file: package.json
-          cache: pnpm
-
-      - name: Verify tag matches manifest version
-        env:
-          REF: ${{ steps.resolve.outputs.ref }}
-        run: |
-          tag="${REF#refs/tags/}"
-          manifest_version=$(node -p "require('./manifest.json').version")
-          if [ "$tag" != "$manifest_version" ]; then
-            echo "tag ($tag) does not match manifest.json version ($manifest_version)" >&2
-            exit 1
-          fi
-          if ! jq -e --arg v "$tag" 'has($v)' versions.json > /dev/null; then
-            echo "version $tag is missing from versions.json" >&2
-            exit 1
-          fi
-
-      - name: Verify release does not already exist
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          REF: ${{ steps.resolve.outputs.ref }}
-        run: |
-          tag="${REF#refs/tags/}"
-          if gh release view "$tag" --repo "$GITHUB_REPOSITORY" > /dev/null 2>&1; then
-            echo "release $tag already exists; delete it first or bump the version" >&2
-            exit 1
-          fi
-
-      - run: pnpm install --frozen-lockfile
-      - run: pnpm check
-      - run: pnpm build
-
-      - name: Attest release artifacts
-        uses: actions/attest-build-provenance@a2bbfa25375fe432b6a289bc6b6cd05ecd0c4c32 # v4.1.0
-        with:
-          subject-path: |
-            main.js
-            manifest.json
-            styles.css
-
-      - name: Create release
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          REF: ${{ steps.resolve.outputs.ref }}
-        run: |
-          tag="${REF#refs/tags/}"
-          prerelease_flag=""
-          case "$tag" in
-            *-*) prerelease_flag="--prerelease" ;;
-          esac
-          gh release create "$tag" \
-            --title "$tag" \
-            --generate-notes \
-            $prerelease_flag \
-            main.js manifest.json styles.css

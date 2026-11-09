@@ -45,6 +45,9 @@ importers:
       eslint-plugin-obsidianmd:
         specifier: 0.4.2
         version: 0.4.2(@eslint/js@9.39.4)(@eslint/json@0.14.0)(@typescript-eslint/parser@8.69.0(eslint@10.10.0)(typescript@6.0.3))(eslint@10.10.0)(obsidian@1.13.1(@codemirror/state@6.5.0)(@codemirror/view@6.38.6))(typescript-eslint@8.61.1(eslint@10.10.0)(typescript@6.0.3))
+      fflate:
+        specifier: 0.8.2
+        version: 0.8.2
       happy-dom:
         specifier: 20.14.0
         version: 20.14.0
@@ -1598,6 +1601,9 @@ packages:
     peerDependenciesMeta:
       picomatch:
         optional: true
+
+  fflate@0.8.2:
+    resolution: {integrity: sha512-cPJU47OaAoCbg0pBvzsgpTPhmhqI5eJjh/JIu8tPj5q+T7iLvW/JAYUqmE7KOB4R1ZyEhzBaIQpQpardBF5z8A==}
 
   fflate@0.8.3:
     resolution: {integrity: sha512-tbZNuJrLwGUp3zshBtdy4W+ORxZuIh8a5ilyIEQDC5rY1f3U20JMry0Ll3WBzU58EZKsEuJFXhb5gwv8CsPvgA==}
@@ -4241,6 +4247,8 @@ snapshots:
   fdir@6.5.0(picomatch@4.0.4):
     optionalDependencies:
       picomatch: 4.0.4
+
+  fflate@0.8.2: {}
 
   fflate@0.8.3: {}
 

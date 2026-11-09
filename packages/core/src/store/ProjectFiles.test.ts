@@ -230,7 +230,7 @@ describe('project data', () => {
     expect(german.find((field) => field.key === 'grundstueck-flurstueck')).toEqual({
       key: 'grundstueck-flurstueck',
       label: 'Flurstück',
-      group: 'Grundstück'
+      group: 'Baugrundstück'
     })
     expect(german.every((field) => isValidDataKey(field.key))).toBe(true)
   })

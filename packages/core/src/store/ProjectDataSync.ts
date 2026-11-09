@@ -110,6 +110,8 @@ export interface ProjectSheetState {
   mtime: number
   /** The fingerprint both sides had then. */
   hash: string
+  /** The workbook layout the sheet was last written in; missing before layouts were counted. */
+  layout?: number
 }
 
 export type SheetSyncAction = 'none' | 'write-sheet' | 'read-sheet'

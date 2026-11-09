@@ -377,11 +377,18 @@ export function projectDataKeyFor(group: string, label: string, taken: readonly 
 }
 
 const DEFAULT_DATA_FIELDS: { key: string; group: MessageKey; label: MessageKey }[] = [
+  { key: 'projekt-code', group: 'projectData.group.project', label: 'projectData.field.projectCode' },
+  { key: 'projekt-bezeichnung', group: 'projectData.group.project', label: 'projectData.field.projectTitle' },
   { key: 'bauherr-name', group: 'projectData.group.client', label: 'projectData.field.clientName' },
-  { key: 'bauherr-anschrift', group: 'projectData.group.client', label: 'projectData.field.clientAddress' },
+  { key: 'bauherr-nachname', group: 'projectData.group.client', label: 'projectData.field.clientLastName' },
+  { key: 'bauherr-straße', group: 'projectData.group.client', label: 'projectData.field.clientStreet' },
+  { key: 'bauherr-plz', group: 'projectData.group.client', label: 'projectData.field.clientPostcode' },
+  { key: 'bauherr-ort', group: 'projectData.group.client', label: 'projectData.field.clientTown' },
   { key: 'bauherr-telefon', group: 'projectData.group.client', label: 'projectData.field.clientPhone' },
   { key: 'bauherr-email', group: 'projectData.group.client', label: 'projectData.field.clientEmail' },
   { key: 'grundstueck-adresse', group: 'projectData.group.plot', label: 'projectData.field.plotAddress' },
+  { key: 'grundstueck-plz', group: 'projectData.group.plot', label: 'projectData.field.plotPostcode' },
+  { key: 'grundstueck-ort', group: 'projectData.group.plot', label: 'projectData.field.plotTown' },
   { key: 'grundstueck-gemarkung', group: 'projectData.group.plot', label: 'projectData.field.plotDistrict' },
   { key: 'grundstueck-flur', group: 'projectData.group.plot', label: 'projectData.field.plotFlur' },
   { key: 'grundstueck-flurstueck', group: 'projectData.group.plot', label: 'projectData.field.plotParcel' },
@@ -397,7 +404,7 @@ const DEFAULT_DATA_FIELDS: { key: string; group: MessageKey; label: MessageKey }
 ]
 
 /**
- * The fields a vault starts with: client, plot and zoning plan, labelled in the active
+ * The fields a vault starts with: project, client, plot and zoning plan, labelled in the active
  * language. The keys stay the same in every language, since programs read them.
  */
 export function defaultProjectDataFields(): ProjectDataField[] {

@@ -404,7 +404,7 @@ export interface PMSettings {
   /** Whether each project's data note is kept in step with a spreadsheet. */
   projectDataSheetSync: boolean
   /** What the last spreadsheet sync of each project left behind, by project path. */
-  projectDataSheets: Record<string, { path: string; mtime: number; hash: string }>
+  projectDataSheets: Record<string, { path: string; mtime: number; hash: string; layout?: number }>
   /** Icons for priorities that don't carry their own. */
   priorityIcons: PriorityIconSet
   /** Task properties every project starts with. A project adds to these, or overrides one by id. */

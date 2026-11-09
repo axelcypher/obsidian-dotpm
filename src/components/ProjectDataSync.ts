@@ -2,6 +2,7 @@ import { FileSystemAdapter, Notice, Platform, TFile } from 'obsidian'
 import type PMPlugin from '#main'
 import {
   type ProjectDataRow,
+  type ProjectSheetState,
   changedValues,
   projectDataHash,
   projectDataRows,
@@ -35,6 +36,9 @@ export interface SheetStatus {
   ok: boolean
   message: string
 }
+
+/** Raised whenever the workbook's layout changes, so sheets written before are written again. */
+const SHEET_LAYOUT = 2
 
 /** A data note being typed in saves every few seconds; one write covers a burst of them. */
 const WRITE_DELAY_MS = 1500
@@ -210,8 +214,6 @@ export class ProjectDataSync {
     return {
       sheet: t('sheet.name'),
       mailMerge: t('sheet.mailMerge'),
-      group: t('sheet.group'),
-      label: t('sheet.label'),
       key: t('sheet.key'),
       value: t('sheet.value')
     }
@@ -232,14 +234,17 @@ export class ProjectDataSync {
     const noteHash = projectDataHash(noteValues)
     const sheetMtime = await this.mtime(location)
     const state = plugin.settings.projectDataSheets[projectPath]
-    const action = sheetSyncAction({ state, path: location.path, noteHash, noteMtime: note.stat.mtime, sheetMtime })
+    let action = sheetSyncAction({ state, path: location.path, noteHash, noteMtime: note.stat.mtime, sheetMtime })
+    // A sheet written in an older layout is written again once nothing else is pending.
+    if (action === 'none' && state?.layout !== SHEET_LAYOUT) action = 'write-sheet'
 
     if (action === 'write-sheet') {
       await this.write(location, writeProjectDataWorkbook(rows, this.labels()))
       await this.saveState(projectPath, {
         path: location.path,
         mtime: (await this.mtime(location)) ?? Date.now(),
-        hash: noteHash
+        hash: noteHash,
+        layout: SHEET_LAYOUT
       })
       if (state && state.path !== location.path) await this.dropVaultCopy(state.path)
     } else if (action === 'read-sheet' && sheetMtime !== null) {
@@ -252,7 +257,7 @@ export class ProjectDataSync {
           hash = projectDataHash(rowValues(this.rows(frontmatter)))
         })
       }
-      await this.saveState(projectPath, { path: location.path, mtime: sheetMtime, hash })
+      await this.saveState(projectPath, { path: location.path, mtime: sheetMtime, hash, layout: state?.layout })
     }
     this.setStatus(projectPath, { ok: true, message: '' })
   }
@@ -263,7 +268,7 @@ export class ProjectDataSync {
     if (file instanceof TFile && file.extension === 'xlsx') await this.plugin.app.fileManager.trashFile(file)
   }
 
-  private async saveState(projectPath: string, state: { path: string; mtime: number; hash: string }): Promise<void> {
+  private async saveState(projectPath: string, state: ProjectSheetState): Promise<void> {
     this.plugin.settings.projectDataSheets[projectPath] = state
     await this.plugin.saveSettings()
   }

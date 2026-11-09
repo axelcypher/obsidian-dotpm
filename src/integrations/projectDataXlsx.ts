@@ -1,5 +1,6 @@
-import { read, utils, write } from 'xlsx'
+import { read, utils } from 'xlsx'
 import type { ProjectDataRow, ProjectDataValue } from '@dotpm/core'
+import { type XlsxRow, type XlsxStyle, writeXlsx } from './xlsxWriter'
 
 /** The words the workbook is written with, in the vault's language. */
 export interface ProjectDataSheetLabels {
@@ -7,8 +8,7 @@ export interface ProjectDataSheetLabels {
   sheet: string
   /** The one-row sheet for mail merges and other programs. */
   mailMerge: string
-  group: string
-  label: string
+  /** Headings an older sheet may carry over its key and value columns. */
   key: string
   value: string
 }
@@ -16,32 +16,62 @@ export interface ProjectDataSheetLabels {
 const KEY_HEADINGS = ['schlüssel', 'key', 'eigenschaft', 'property']
 const VALUE_HEADINGS = ['wert', 'value']
 
+/** Where the list sheet keeps a row's label, key and value; column A holds the group headings. */
+const LABEL_COLUMN = 1
+const KEY_COLUMN = 2
+const VALUE_COLUMN = 3
+
+const FONT = { name: 'Arial', size: 12 }
+const GROUP: XlsxStyle = { bold: true, size: 14, fill: 'D9D9D9' }
+const LABEL: XlsxStyle = { bold: true, size: 10 }
+const VALUE: XlsxStyle = { size: 10 }
+
 /**
- * A workbook with two sheets: the rows as a list (group, label, key, value) to read and
- * edit, and the keys as headings over one row of values, as a mail merge expects them.
+ * The list sheet: each group as a grey band with its name, then one row per field with its
+ * label in bold, its key, and its value.
+ */
+function listRows(rows: readonly ProjectDataRow[]): XlsxRow[] {
+  const out: XlsxRow[] = []
+  let group: string | null = null
+  for (const row of rows) {
+    if (row.group !== group) {
+      group = row.group
+      if (group) out.push({ cells: [{ value: group, style: GROUP }], style: GROUP, height: 21 })
+    }
+    const cells: XlsxRow['cells'] = []
+    cells[LABEL_COLUMN] = { value: row.label, style: LABEL }
+    cells[KEY_COLUMN] = { value: row.key }
+    cells[VALUE_COLUMN] = { value: row.value, style: VALUE }
+    out.push({ cells })
+  }
+  return out
+}
+
+/**
+ * A workbook with two sheets: the data as a grouped list to read and edit, and the keys as
+ * headings over one row of values, as a mail merge expects them.
  */
 export function writeProjectDataWorkbook(rows: readonly ProjectDataRow[], labels: ProjectDataSheetLabels): Uint8Array {
-  const book = utils.book_new()
-  const list = utils.aoa_to_sheet([
-    [labels.group, labels.label, labels.key, labels.value],
-    ...rows.map((row) => [row.group, row.label, row.key, row.value])
-  ])
-  list['!cols'] = [{ wch: 14 }, { wch: 26 }, { wch: 26 }, { wch: 48 }]
-  utils.book_append_sheet(book, list, labels.sheet)
-  const merge = utils.aoa_to_sheet([rows.map((row) => row.key), rows.map((row) => row.value)])
-  utils.book_append_sheet(book, merge, labels.mailMerge)
-  return new Uint8Array(write(book, { type: 'array', bookType: 'xlsx' }) as ArrayBuffer)
+  return writeXlsx(
+    [
+      { name: labels.sheet, columns: [3, 26, 26, 80], rows: listRows(rows) },
+      {
+        name: labels.mailMerge,
+        columns: rows.map(() => 22),
+        rows: [
+          { cells: rows.map((row) => ({ value: row.key, style: LABEL })) },
+          { cells: rows.map((row) => ({ value: row.value, style: VALUE })) }
+        ]
+      }
+    ],
+    FONT
+  )
 }
 
 /** A cell as text: what a heading or a key is written as. */
 function cellText(cell: unknown): string {
   if (typeof cell === 'string') return cell.trim()
   return typeof cell === 'number' || typeof cell === 'boolean' ? String(cell) : ''
-}
-
-function columnOf(header: unknown[], names: string[], fallback: number): number {
-  const index = header.findIndex((cell) => names.includes(cellText(cell).toLowerCase()))
-  return index === -1 ? fallback : index
 }
 
 function sheetValue(raw: unknown): ProjectDataValue {
@@ -53,8 +83,10 @@ function sheetValue(raw: unknown): ProjectDataValue {
 }
 
 /**
- * Key and value of each row of the list sheet, wherever its key and value columns are,
- * found by their headings. The mail merge sheet is never read: it only mirrors the list.
+ * Key and value of each row of the list sheet. A sheet with headings over its columns,
+ * as older versions wrote and people rearrange, is read by those headings; otherwise key
+ * and value are columns C and D. Group headings have no key and are passed over. The mail
+ * merge sheet is never read: it only mirrors the list.
  */
 export function readProjectDataWorkbook(
   data: ArrayBuffer | Uint8Array,
@@ -64,11 +96,14 @@ export function readProjectDataWorkbook(
   const sheet = book.Sheets[labels.sheet] ?? book.Sheets[book.SheetNames[0]]
   if (!sheet) return {}
   const rows = utils.sheet_to_json<unknown[]>(sheet, { header: 1, raw: true, defval: null })
-  const header = rows[0] ?? []
-  const keyColumn = columnOf(header, [labels.key.toLowerCase(), ...KEY_HEADINGS], 2)
-  const valueColumn = columnOf(header, [labels.value.toLowerCase(), ...VALUE_HEADINGS], 3)
+  const header = (rows[0] ?? []).map((cell) => cellText(cell).toLowerCase())
+  const keyHeading = header.findIndex((cell) => [labels.key.toLowerCase(), ...KEY_HEADINGS].includes(cell))
+  const valueHeading = header.findIndex((cell) => [labels.value.toLowerCase(), ...VALUE_HEADINGS].includes(cell))
+  const hasHeadings = keyHeading !== -1 && valueHeading !== -1
+  const keyColumn = hasHeadings ? keyHeading : KEY_COLUMN
+  const valueColumn = hasHeadings ? valueHeading : VALUE_COLUMN
   const values: Record<string, ProjectDataValue> = {}
-  for (const row of rows.slice(1)) {
+  for (const row of rows.slice(hasHeadings ? 1 : 0)) {
     const key = cellText(row[keyColumn])
     if (key) values[key] = sheetValue(row[valueColumn])
   }

@@ -7,7 +7,7 @@ export const PM_RELEASE_NOTES_VIEW_TYPE = 'pm-release-notes'
 
 export const RELEASES = parseChangelog(__CHANGELOG__)
 
-const CHANGELOG_URL = 'https://github.com/dotpm/obsidian-pm/blob/main/CHANGELOG.md'
+const CHANGELOG_URL = 'https://github.com/axelcypher/obsidian-dotpm/blob/main/CHANGELOG.md'
 
 /** `since` is the version an update came from; without it the view shows the running version's notes. */
 export interface ReleaseNotesState {

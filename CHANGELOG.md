@@ -7,6 +7,26 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [2.7.0] - 2026-11-09
+
+First release of the private revamp, *dotpm (Revamped)*.
+
+### Highlights
+
+- **Project statuses:** Put a project in a status like Active, Planned, On hold or Done straight from the project list. Its row takes the status color, and the list keeps projects in the order of their statuses.
+
+### Added
+
+- Added project statuses, set from a status chip in the project list, the project's context menu and the project overview
+- Added "Project statuses" to the settings, with the presets' names, colors, icons and order, the note property they are kept in, and whether the list is ordered by them
+- Added a status column to the project list, which the "Fields" menu can hide or move
+- The project list can now be grouped by status
+- Projects in a status are tinted in its color in the project list and among the sub-projects of a project overview
+
+### Changed
+
+- The plugin is now *dotpm (Revamped)* with the id `axlc-dotpm-revamped`, released from [axelcypher/obsidian-dotpm](https://github.com/axelcypher/obsidian-dotpm)
+
 ## [2.6.0] - 2026-10-06
 
 ### Highlights

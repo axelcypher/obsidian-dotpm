@@ -1,21 +1,45 @@
-<div align="center">
+# dotpm (Revamped)
 
-# dotpm
+> **Private revamp.** This is a personal rewrite of [dotpm](https://github.com/dotpm/obsidian-pm) by
+> [Stepan Kropachev](https://github.com/StepanKropachev) and the [dotpm contributors](https://github.com/dotpm/obsidian-pm/graphs/contributors), maintained by [axelcypher](https://github.com/axelcypher)
+> for my own use. It is not published in the Obsidian community plugin directory.
+> All credit for the original plugin goes to its authors. Please report issues with this
+> version here, not upstream.
 
 **Project management inside Obsidian. Table, Gantt timeline and Kanban board views over plain Markdown notes.**
 
-[![Obsidian community plugin](https://img.shields.io/badge/Obsidian-community%20plugin-7c3aed?logo=obsidian&logoColor=white)](https://obsidian.md/plugins?id=project-manager)
-[![Downloads](https://img.shields.io/github/downloads/dotpm/obsidian-pm/total?color=2ea44f)](https://github.com/dotpm/obsidian-pm/releases)
-[![License](https://img.shields.io/github/license/dotpm/obsidian-pm)](LICENSE)
-[![Donate](https://img.shields.io/badge/Donate-Buy%20me%20a%20coffee-ffdd00?logo=buy-me-a-coffee&logoColor=black)](https://www.buymeacoffee.com/kropachev)
+## What's different in this revamp
 
-[Install](#install) | [Quick start](#quick-start) | [Docs](docs) | [Website](https://dotpm.pm) | [Changelog](CHANGELOG.md)
+- **Project statuses:** a project can be put in a status preset such as *Active*, *Planned*, *On hold* or *Done*. The status is switched with quick actions: the status chip in the project list, the project's context menu, and the chip next to the title on the project overview.
+- **Colored project list:** a project in a status is tinted in the preset's color, with a stripe down the row; sub-projects on a project overview get the same highlight.
+- **Status order:** the project list puts projects in the order of the presets (projects without a status last) and applies its own sort within each status. Sub-projects are ordered the same way under their parent. Can be turned off in the settings.
+- **Group by status:** the project list's *Group* menu has a *Status* option with one group per preset.
+- **Predefined presets:** *Settings → Project statuses* holds the presets with name, color, icon and order (drag to reorder). The order of the presets is the order of the list.
+- **Plain Markdown:** the status is a property of the project note (`status` by default, configurable), for example `status: active`. A hand-typed preset name such as `status: Active` is recognized too. A preset's id follows its name until a project uses it, so new presets get readable values.
+- **Plugin identity:** own plugin ID `axlc-dotpm-revamped` and name *dotpm (Revamped)*.
+- **Release workflow:** streamlined build & release workflow shared with my other revamps (upstream CI, CodeQL, package publishing and issue templates were removed). Builds run with pnpm on Node 24, also on Windows.
 
-English | [简体中文](README.zh-CN.md)
+## Installation
+
+- **Revamp Manager:** installed and updated automatically by my [Revamp Manager](https://github.com/axelcypher/obsidian-revamp-manager).
+- **Manual:** download `main.js`, `manifest.json` and `styles.css` from the [latest release](https://github.com/axelcypher/obsidian-dotpm/releases/latest) into `<vault>/.obsidian/plugins/axlc-dotpm-revamped/`, then reload Obsidian and enable *dotpm (Revamped)*.
+- **BRAT:** choose **Add beta plugin** and enter `axelcypher/obsidian-dotpm`.
+
+Needs Obsidian 1.13 or newer. Works on desktop and mobile.
+
+**Coming from the original dotpm?** The new ID makes this a separate plugin for Obsidian. Disable *dotpm*, copy `data.json` from `.obsidian/plugins/project-manager/` to `.obsidian/plugins/axlc-dotpm-revamped/`, enable *dotpm (Revamped)* and remove the original. Projects and tasks are notes and need no migration.
+
+## Project statuses
+
+1. Open **Settings → dotpm (Revamped) → Project statuses** and adjust the presets: name, color, icon, order.
+2. In the project list, click a project's status chip (or right-click the project) and pick a status.
+3. The row takes the status color and moves to its place in the list.
+
+Under the same heading you choose the note property the status is kept in and whether the list is ordered by status. Changing the property reads statuses from the new property; values already written under the old one stay where they are.
+
+## About dotpm
 
 <img width="1422" alt="dotpm dashboard" src="https://github.com/user-attachments/assets/ca6bc67f-e656-45be-b93a-17410555ec1a" />
-
-</div>
 
 Project tools keep the plan in one app and the thinking about it in another. dotpm keeps both in the vault. A project is a note, a task is a note, and the table, the timeline and the board are three ways of looking at the same files.
 
@@ -25,30 +49,15 @@ Project tools keep the plan in one app and the thinking about it in another. dot
 - Nothing to sign up for. Projects sync with whatever already syncs the vault, and a project folder can be diffed and reviewed in git like any other code.
 - Runs on desktop and mobile, and any view exports to one HTML file that opens without Obsidian.
 
-## Install
+### Quick start
 
-In Obsidian, open **Settings > Community plugins > Browse**, search for **dotpm**, install and enable it. Or open [the listing](https://obsidian.md/plugins?id=project-manager) directly.
-
-Needs Obsidian 1.13 or newer. Works on desktop and mobile.
-
-<details>
-<summary>Beta builds and manual install</summary>
-
-**BRAT:** install [BRAT](https://github.com/TfTHacker/obsidian42-brat), choose **Add beta plugin** and enter `dotpm/obsidian-pm`.
-
-**Manual:** download `main.js`, `manifest.json` and `styles.css` from the [latest release](https://github.com/dotpm/obsidian-pm/releases/latest) into `<vault>/.obsidian/plugins/project-manager/`, then reload Obsidian and enable the plugin.
-
-</details>
-
-## Quick start
-
-1. Click the timeline icon in the ribbon, or run **dotpm: Open projects pane**.
+1. Click the timeline icon in the ribbon, or run **dotpm (Revamped): Open projects pane**.
 2. Click **New project**, give it a name, and open it.
 3. Click **Add task**. Set a status, a due date, an assignee, whatever you need.
 4. Switch between **Table**, **Timeline** and **Board** from the last part of the path at the top of the view.
 5. Look in your vault. There is a `Projects/Your project.md` note and a `Projects/Your project_tasks/` folder with one note per task.
 
-Already have notes you want as tasks? Run **dotpm: Import notes as tasks**. To turn an existing note into a project, add `pm-project: true` to its properties and run **dotpm: Open current file as project**.
+Already have notes you want as tasks? Run **dotpm (Revamped): Import notes as tasks**. To turn an existing note into a project, add `pm-project: true` to its properties and run **dotpm (Revamped): Open current file as project**.
 
 ## Views
 
@@ -104,6 +113,7 @@ One column per status, or per priority, assignee, tag, type or custom field. Dra
 **Customizing**
 
 - Statuses and priorities with label, color and icon, global or per project
+- Project statuses with label, color, icon and order, switched from the project list (revamp)
 - Per-project overrides for default view, scheduling and archiving
 - Team members, global and per project
 
@@ -133,7 +143,7 @@ Sync works the way it does for any other note. Obsidian Sync, iCloud, Syncthing 
 
 ## Outside Obsidian
 
-**Share a view.** **dotpm: Export current view as HTML** writes the open table, timeline or board to a single file that opens in any browser, with the tasks, the filter and the icons inside it.
+**Share a view.** **dotpm (Revamped): Export current view as HTML** writes the open table, timeline or board to a single file that opens in any browser, with the tasks, the filter and the icons inside it.
 
 **Local API and MCP.** Turn on **Settings > Local API** and the desktop app serves the vault's projects on `127.0.0.1` with a bearer token. Scripts use plain HTTP; coding agents connect over the Model Context Protocol:
 
@@ -153,11 +163,9 @@ Everything a client changes goes through the same code the views use and shows u
 
 **TaskNotes.** dotpm imports TaskNotes tasks with their dates, dependencies and hierarchy, and can share statuses and priorities with it. See [docs/tasknotes.md](docs/tasknotes.md).
 
-## Contributing
+## Development
 
-Bug reports and feature requests go in [issues](https://github.com/dotpm/obsidian-pm/issues). Pull requests are welcome. For anything larger than a fix, open an issue first so the approach can be agreed on before the work is done.
-
-The repo is a pnpm workspace on Node 24. `pnpm dev` builds into the vault named by `VAULT_PATH`, and `pnpm check`, `pnpm check:submission` and `pnpm test` are what CI runs.
+The repo is a pnpm workspace on Node 24. `pnpm dev` builds into the vault named by `VAULT_PATH`; `pnpm check` and `pnpm test` run the linters, the type check and the tests. Releases are built by `.github/workflows/release.yml` when a version tag is pushed.
 
 ## License
 

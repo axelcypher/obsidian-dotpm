@@ -1,4 +1,4 @@
-import { watch, writeFileSync } from 'node:fs'
+import { readFileSync, watch, writeFileSync } from 'node:fs'
 import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { bundle } from 'lightningcss'
@@ -9,7 +9,8 @@ const stylesDir = join(root, 'src/styles')
 
 const prod = Boolean(process.env['PRODUCTION'])
 const vaultPath = process.env['VAULT_PATH']
-const outDir = vaultPath ? `${vaultPath}/.obsidian/plugins/project-manager` : root
+const pluginId = JSON.parse(readFileSync(join(root, 'manifest.json'), 'utf8')).id
+const outDir = vaultPath ? `${vaultPath}/.obsidian/plugins/${pluginId}` : root
 const outFile = join(outDir, 'styles.css')
 
 function build() {
